@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import Profile from './Profile'; // <-- Restore Profile import
 
 // A reusable Modal component for the photo upload prompt
 const Modal = ({ isOpen, children }) => {
@@ -17,12 +18,12 @@ export default function PickerDashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Centered on Charkhi Dadri
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false); // <-- Restore Profile state
   const [selectedReport, setSelectedReport] = useState(null);
   const [afterImageFile, setAfterImageFile] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    // Fetch reports near Charkhi Dadri when the component loads
     const fetchReports = async (location) => {
       setLoading(true);
       const { data, error } = await supabase.rpc('nearby_reports', {
@@ -53,23 +54,14 @@ export default function PickerDashboard({ user, onLogout }) {
     }
     setActionLoading(true);
     
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('report-images')
-      .upload(`public/after_${Date.now()}_${afterImageFile.name}`, afterImageFile);
-
+    const { data: uploadData, error: uploadError } = await supabase.storage.from('report-images').upload(`public/after_${Date.now()}_${afterImageFile.name}`, afterImageFile);
     if (uploadError) {
       setActionLoading(false);
       return alert('Image upload failed. Please try again.');
     }
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('report-images')
-      .getPublicUrl(uploadData.path);
-
-    const { error: updateError } = await supabase
-      .from('reports')
-      .update({ status: 'completed', after_image_url: publicUrl })
-      .eq('id', selectedReport.id);
+    const { data: { publicUrl } } = supabase.storage.from('report-images').getPublicUrl(uploadData.path);
+    const { error: updateError } = await supabase.from('reports').update({ status: 'completed', after_image_url: publicUrl }).eq('id', selectedReport.id);
 
     if (updateError) {
       alert('Failed to update the report.');
@@ -87,17 +79,21 @@ export default function PickerDashboard({ user, onLogout }) {
     <div className="relative min-h-screen bg-dark-text text-gray-300 font-sans">
       <header className="relative z-20 p-4 flex justify-between items-center bg-dark-text/50 backdrop-blur-sm">
         <h1 className="text-xl font-bold text-white">Picker Dashboard</h1>
-        <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">
-          Logout
-        </button>
+        {/* --- Restore Profile and Logout buttons --- */}
+        <div className="flex items-center gap-4">
+          <button onClick={() => setIsProfileOpen(true)} className="px-4 py-2 font-semibold text-white bg-primary rounded-lg hover:bg-blue-700 transition-colors">
+            Profile
+          </button>
+          <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">
+            Logout
+          </button>
+        </div>
       </header>
 
       <main className="relative z-10 container mx-auto px-4 py-8">
         <h2 className="text-3xl font-bold text-white mb-6 text-center">Available Tasks in Charkhi Dadri</h2>
         <div className="mb-8 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl h-96">
-          {loading ? (
-            <div className='h-full flex items-center justify-center bg-gray-800'>Loading Map...</div>
-          ) : (
+          {loading ? ( <div className='h-full flex items-center justify-center bg-gray-800'>Loading Map...</div> ) : (
             <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', backgroundColor: '#1F2937' }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap'/>
               {reports.map(report => (
@@ -105,7 +101,7 @@ export default function PickerDashboard({ user, onLogout }) {
                   <Popup>
                     <img src={report.image_url} alt="Garbage" className="w-full h-28 object-cover rounded-t mb-2"/>
                     <div className="p-2">
-                        <p className="text-xs text-gray-400 italic mb-2">"{report.description || 'No description provided.'}"</p>
+                        <p className="text-xs text-gray-400 italic mb-2">"{report.description || 'No description.'}"</p>
                         <p className="text-sm font-bold">{report.dist_meters.toFixed(0)}m away</p>
                     </div>
                   </Popup>
@@ -120,15 +116,12 @@ export default function PickerDashboard({ user, onLogout }) {
             <div key={report.id} className="bg-gray-800/50 border border-gray-700 rounded-2xl shadow-lg backdrop-blur-xl overflow-hidden flex flex-col">
               <img src={report.image_url} alt="Garbage report" className="w-full h-48 object-cover" />
               <div className="p-4 flex flex-col flex-grow">
-                <p className="text-sm text-gray-400 italic">"{report.description || 'No description provided.'}"</p>
+                <p className="text-sm text-gray-400 italic">"{report.description || 'No description.'}"</p>
                 <div className="flex-grow mt-2">
                     <p className="font-semibold text-white">{report.dist_meters.toFixed(0)}m away</p>
                     <p className="text-sm text-gray-400">Status: <span className="font-semibold text-orange-400">{report.status.toUpperCase()}</span></p>
                 </div>
-                <button 
-                  onClick={() => handleMarkCompleteClick(report)} 
-                  className="mt-4 w-full px-4 py-2 font-semibold text-white bg-secondary rounded-lg hover:bg-green-700 transition-colors"
-                >
+                <button onClick={() => handleMarkCompleteClick(report)} className="mt-4 w-full px-4 py-2 font-semibold text-white bg-secondary rounded-lg hover:bg-green-700 transition-colors">
                   Mark as Completed
                 </button>
               </div>
@@ -142,13 +135,7 @@ export default function PickerDashboard({ user, onLogout }) {
             <h2 className="text-2xl font-bold text-white">Complete Task ✅</h2>
             <p className="text-gray-400">Upload a photo of the clean area to verify completion.</p>
             <form onSubmit={handleCompleteSubmit}>
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  onChange={(e) => setAfterImageFile(e.target.files[0])} 
-                  required 
-                  className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-gray-700 file:text-secondary hover:file:bg-gray-600"
-                />
+                <input type="file" accept="image/*" onChange={(e) => setAfterImageFile(e.target.files[0])} required className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-gray-700 file:text-secondary hover:file:bg-gray-600"/>
                 <div className="mt-6 flex gap-4">
                     <button type="button" onClick={() => setIsModalOpen(false)} className="w-full p-2 font-semibold bg-gray-600 rounded-lg hover:bg-gray-700">Cancel</button>
                     <button type="submit" disabled={actionLoading} className="w-full p-2 font-semibold text-white bg-secondary rounded-lg hover:bg-green-700 disabled:bg-gray-500">
@@ -158,6 +145,9 @@ export default function PickerDashboard({ user, onLogout }) {
             </form>
         </div>
       </Modal>
+
+      {/* --- Restore Profile Component --- */}
+      <Profile user={user} isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
     </div>
   );
 }

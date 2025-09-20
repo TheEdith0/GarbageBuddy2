@@ -4,36 +4,28 @@ import { supabase } from '../supabaseClient';
 export default function Profile({ user, isOpen, onClose }) {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
-  const [stats, setStats] = useState(null);
 
   useEffect(() => {
+    // Only fetch data when the modal is opened
     if (isOpen) {
-      const fetchProfileAndStats = async () => {
+      const fetchProfile = async () => {
         setLoading(true);
-        
-        // Fetch profile details
-        const { data: profileData, error: profileError } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
           .select(`full_name, role`)
           .eq('id', user.id)
           .single();
 
-        if (profileError) console.warn(profileError);
-        else setProfile(profileData);
-
-        // Fetch reporter stats if the user is a reporter
-        if (profileData?.role === 'reporter') {
-          const { data: statsData, error: statsError } = await supabase
-            .rpc('get_reporter_stats', { p_user_id: user.id });
-
-          if (statsError) console.warn(statsError);
-          else if (statsData && statsData.length > 0) setStats(statsData[0]);
+        if (error) {
+          console.warn(error);
+          alert("Could not fetch profile.");
+        } else {
+          setProfile(data);
         }
-
         setLoading(false);
       };
 
-      fetchProfileAndStats();
+      fetchProfile();
     }
   }, [user.id, isOpen]);
 
@@ -42,11 +34,11 @@ export default function Profile({ user, isOpen, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 backdrop-blur-sm font-sans">
       <div className="w-full max-w-md p-8 space-y-4 bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-white">My Profile</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-3xl font-light">&times;</button>
         </div>
 
         {loading ? (
@@ -63,15 +55,8 @@ export default function Profile({ user, isOpen, onClose }) {
             </div>
             <div>
               <label className="text-sm font-medium text-gray-500">Role</label>
-              <p className="text-lg font-semibold capitalize text-green-400">{profile?.role}</p>
+              <p className="text-lg font-semibold capitalize text-secondary">{profile?.role}</p>
             </div>
-            {/* --- NEW: Display Report Count --- */}
-            {profile?.role === 'reporter' && stats && (
-              <div>
-                <label className="text-sm font-medium text-gray-500">Total Reports Submitted</label>
-                <p className="text-2xl font-bold text-white">{stats.report_count}</p>
-              </div>
-            )}
           </div>
         )}
       </div>
