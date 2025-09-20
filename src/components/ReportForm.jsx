@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import Profile from './Profile';
+import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip } from 'react-leaflet';
 
-// ... (Keep the AnimatedBackground component as it is)
+// Re-using the animated background component
 const AnimatedBackground = () => {
   const particles = [
     { left: '10%', duration: '20s', delay: '0s', size: '15px' },
@@ -23,24 +24,58 @@ const AnimatedBackground = () => {
   );
 };
 
+// Map settings
+const containerStyle = {
+  width: '100%',
+  height: '300px',
+  borderRadius: '1rem',
+};
+const blueDotOptions = { color: '#007BFF', fillColor: '#007BFF', fillOpacity: 1, radius: 8 };
+
 export default function ReportForm({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
-  const [location, setLocation] = useState(null);
+  const [reportLocation, setReportLocation] = useState(null); // The draggable pin
+  const [currentLocation, setCurrentLocation] = useState(null); // The user's live blue dot
+  const [mapCenter, setMapCenter] = useState([28.4595, 77.0266]); // Default center
   const [imageFile, setImageFile] = useState(null);
   const [volume, setVolume] = useState('Small');
-  const [isProfileOpen, setIsProfileOpen] = useState(false); // State for modal
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
+  // Get user's current location to center the map and set the blue dot
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => alert('Please enable location services.')
-    );
-  }, []);
+    let watcherId;
+    if (navigator.geolocation) {
+      // Get initial position
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const userCoords = [pos.coords.latitude, pos.coords.longitude];
+          setMapCenter(userCoords);
+          setReportLocation(userCoords);
+          setCurrentLocation(userCoords);
+        },
+        () => {
+          alert('Could not get your location. Please mark it manually.');
+          setReportLocation(mapCenter); // Set pin to default if denied
+        }
+      );
+      // Watch for continued changes
+      watcherId = navigator.geolocation.watchPosition((pos) => {
+        setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
+      });
+    }
+
+    // Cleanup function to clear the watcher when the component unmounts
+    return () => {
+      if (watcherId) {
+        navigator.geolocation.clearWatch(watcherId);
+      }
+    };
+  }, []); // The empty array ensures this runs only once
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!imageFile || !location) {
-      alert('Please provide an image and ensure location is enabled.');
+    if (!imageFile || !reportLocation) {
+      alert('Please upload an image and mark the location on the map.');
       return;
     }
     setLoading(true);
@@ -54,7 +89,7 @@ export default function ReportForm({ user, onLogout }) {
 
     const { data: { publicUrl } } = supabase.storage.from('report-images').getPublicUrl(uploadData.path);
     const { error: insertError } = await supabase.from('reports').insert({
-      user_id: user.id, image_url: publicUrl, location: `POINT(${location.lng} ${location.lat})`, volume,
+      user_id: user.id, image_url: publicUrl, location: `POINT(${reportLocation[1]} ${reportLocation[0]})`, volume,
     });
 
     if (insertError) alert(insertError.message);
@@ -64,6 +99,37 @@ export default function ReportForm({ user, onLogout }) {
       e.target.reset();
     }
     setLoading(false);
+  };
+  
+  const DraggableMarker = () => {
+    const markerRef = useRef(null);
+    const eventHandlers = useMemo(
+      () => ({
+        dragend() {
+          const marker = markerRef.current;
+          if (marker != null) {
+            const { lat, lng } = marker.getLatLng();
+            setReportLocation([lat, lng]);
+          }
+        },
+      }),
+      [],
+    );
+
+    useMapEvents({
+      click(e) {
+        setReportLocation([e.latlng.lat, e.latlng.lng]);
+      },
+    });
+
+    return reportLocation === null ? null : (
+      <Marker
+        draggable={true}
+        eventHandlers={eventHandlers}
+        position={reportLocation}
+        ref={markerRef}>
+      </Marker>
+    );
   };
 
   return (
@@ -81,10 +147,33 @@ export default function ReportForm({ user, onLogout }) {
         </div>
       </header>
 
-      <main className="relative z-10 p-4 sm:p-8 flex justify-center items-center">
+      <main className="relative z-10 p-4 sm:p-8 flex justify-center items-start">
         <div className="w-full max-w-xl p-8 space-y-6 bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-white text-center">Create a New Report</h2>
           <form onSubmit={handleSubmit} className="space-y-6">
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Mark the Location</label>
+              <div className='rounded-2xl overflow-hidden' style={{ height: '300px', width: '100%' }}>
+                {reportLocation ? (
+                  <MapContainer center={mapCenter} zoom={13} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <DraggableMarker />
+                    {/* --- NEW: Blue dot for current location --- */}
+                    {currentLocation && (
+                       <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
+                         <Tooltip>You are here</Tooltip>
+                       </CircleMarker>
+                    )}
+                  </MapContainer>
+                ) : <div className='h-full w-full flex items-center justify-center bg-gray-700'>Getting location...</div> }
+              </div>
+              <p className="text-xs text-center text-gray-500 mt-2">The blue dot is your live location. Drag the red pin to the garbage pile.</p>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1">Upload Photo</label>
               <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} required 
@@ -99,10 +188,7 @@ export default function ReportForm({ user, onLogout }) {
                 <option value="Large">Large (Truck bed size)</option>
               </select>
             </div>
-            <p className="text-sm text-center text-gray-500">
-              {location ? `📍 Location captured!` : 'Detecting your location...'}
-            </p>
-            <button type="submit" disabled={loading || !location} 
+            <button type="submit" disabled={loading || !reportLocation} 
               className="w-full p-3 font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-gray-500 transform hover:scale-105 transition-all duration-300">
               {loading ? 'Submitting...' : 'Submit Report'}
             </button>

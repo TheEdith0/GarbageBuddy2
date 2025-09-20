@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import Profile from './Profile';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 
-// ... (Keep the AnimatedBackground component as it is)
+// Re-using the animated background component
 const AnimatedBackground = () => {
   const particles = [
     { left: '10%', duration: '20s', delay: '0s', size: '15px' },
@@ -23,34 +24,58 @@ const AnimatedBackground = () => {
   );
 };
 
+
 export default function PickerDashboard({ user, onLogout }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isProfileOpen, setIsProfileOpen] = useState(false); // State for modal
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [mapCenter, setMapCenter] = useState([28.4595, 77.0266]); // Default center
 
   useEffect(() => {
-    const fetchReports = async (location) => {
-      const { data, error } = await supabase.rpc('nearby_reports', {
-        lat: location.lat, long: location.lng,
-      });
-      if (error) console.error("Error fetching reports:", error);
-      else setReports(data);
+    let watcherId;
+    if (navigator.geolocation) {
+      watcherId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setMapCenter([userLocation.lat, userLocation.lng]);
+          fetchReports(userLocation);
+        },
+        () => {
+          alert('Please enable location services to find reports.');
+          setLoading(false);
+        }
+      );
+    } else {
+      alert("Geolocation is not supported by this browser.");
       setLoading(false);
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => fetchReports({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {
-        alert('Please enable location services to find reports.');
-        setLoading(false);
+    }
+    return () => {
+      if (watcherId) {
+        navigator.geolocation.clearWatch(watcherId);
       }
-    );
+    };
   }, []);
+
+  const fetchReports = async (location) => {
+    setLoading(true);
+    // This RPC call will now return latitude and longitude directly
+    const { data, error } = await supabase.rpc('nearby_reports', {
+      lat: location.lat, long: location.lng,
+    });
+    if (error) {
+      console.error("Error fetching reports:", error);
+    } else {
+      // The data is now clean, no parsing needed
+      setReports(data || []);
+    }
+    setLoading(false);
+  };
 
   const acceptReport = async (reportId) => {
     const { error } = await supabase.from('reports').update({ status: 'claimed', claimed_by: user.id }).eq('id', reportId);
-    if (error) alert(error.message);
-    else {
+    if (error) {
+      alert(error.message);
+    } else {
       alert('Report accepted!');
       setReports(reports.filter(r => r.id !== reportId));
     }
@@ -73,13 +98,33 @@ export default function PickerDashboard({ user, onLogout }) {
 
       <main className="relative z-10 container mx-auto px-4 sm:px-6 py-8">
         <h2 className="text-3xl font-bold text-white mb-6 text-center">Available Tasks Near You</h2>
-        {loading && <p className="text-center text-gray-400">Finding nearby reports...</p>}
-        {!loading && reports.length === 0 && (
-          <div className="text-center py-10 px-6 bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl backdrop-blur-xl">
-            <h3 className="text-2xl font-semibold text-white">All Clean!</h3>
-            <p className="text-gray-400 mt-2">There are no pending reports in your area. Thank you!</p>
-          </div>
-        )}
+
+        <div className="mb-8 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl" style={{ height: '400px' }}>
+          {loading ? (
+             <div className='h-full w-full flex items-center justify-center bg-gray-800'>Loading Map...</div>
+          ) : (
+            <MapContainer center={mapCenter} zoom={13} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              />
+              {reports.map(report => (
+                <Marker key={report.id} position={[report.latitude, report.longitude]}>
+                  <Popup>
+                    <div className="text-center w-40">
+                      <img src={report.image_url} alt="Garbage report" className="w-full h-24 object-cover rounded mb-2"/>
+                      <p>{report.dist_meters.toFixed(0)}m away</p>
+                       <button onClick={() => acceptReport(report.id)} className="w-full mt-2 text-sm px-2 py-1 font-semibold text-white bg-green-600 rounded-md hover:bg-green-700">
+                        Accept
+                      </button>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+          )}
+        </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {reports.map((report) => (
             <div key={report.id} className="bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden flex flex-col transition-transform hover:scale-105">
@@ -88,7 +133,7 @@ export default function PickerDashboard({ user, onLogout }) {
                 <p className="font-semibold text-white">Distance: {report.dist_meters.toFixed(0)}m away</p>
                 <p className="text-sm text-gray-400 mb-4">Status: <span className="font-semibold text-orange-400">{report.status.toUpperCase()}</span></p>
                 <div className="mt-auto">
-                   <a href={`http://googleusercontent.com/maps.google.com/3{report.latitude},${report.longitude}`} target="_blank" rel="noopener noreferrer" 
+                   <a href={`https://www.openstreetmap.org/directions?from=&to=${report.latitude},${report.longitude}`} target="_blank" rel="noopener noreferrer" 
                      className="block w-full text-center mb-2 px-4 py-2 font-semibold text-blue-300 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors">
                     Get Directions
                   </a>
