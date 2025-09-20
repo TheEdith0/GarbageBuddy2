@@ -16,8 +16,10 @@ export default function ReportForm({ user, onLogout }) {
   const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Charkhi Dadri
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
+  // This useEffect fetches reports and sets up polling for updates
   useEffect(() => {
     const fetchMyReports = async () => {
+      setReportsLoading(true);
       const { data, error } = await supabase.from('reports').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
       if (error) console.error("Error fetching reports:", error);
       else setMyReports(data || []);
@@ -28,6 +30,7 @@ export default function ReportForm({ user, onLogout }) {
     return () => clearInterval(interval);
   }, [user.id]);
 
+  // This useEffect handles geolocation and runs only once to prevent loops
   useEffect(() => {
     let watcherId;
     if (navigator.geolocation) {
@@ -48,7 +51,7 @@ export default function ReportForm({ user, onLogout }) {
       });
     }
     return () => { if (watcherId) navigator.geolocation.clearWatch(watcherId); };
-  }, []);
+  }, []); // The empty array [] is the crucial fix for the loop
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -73,9 +76,7 @@ export default function ReportForm({ user, onLogout }) {
     if (insertError) {
       alert(insertError.message);
     } else {
-      // Award points for submitting the report
       await supabase.rpc('award_points', { p_user_id: user.id, p_action: 'report_submit' });
-
       alert('Report submitted successfully! +10 points!');
       setMyReports([newReport, ...myReports]);
       setImageFile(null);

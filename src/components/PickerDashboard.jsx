@@ -16,7 +16,7 @@ const Modal = ({ isOpen, children }) => {
 export default function PickerDashboard({ user, onLogout }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Centered on Charkhi Dadri
+  const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Default to Charkhi Dadri
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -24,6 +24,7 @@ export default function PickerDashboard({ user, onLogout }) {
   const [afterImageFile, setAfterImageFile] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // This useEffect now runs only ONCE to prevent the infinite loop
   useEffect(() => {
     const fetchReports = async (location) => {
       setLoading(true);
@@ -45,16 +46,20 @@ export default function PickerDashboard({ user, onLogout }) {
           setCurrentLocation(userCoords);
           fetchReports({ lat: userCoords[0], lng: userCoords[1] });
         },
-        () => { fetchReports({ lat: mapCenter[0], lng: mapCenter[1] }); }
+        () => {
+          alert("Could not get your location. Showing results for Charkhi Dadri.");
+          fetchReports({ lat: mapCenter[0], lng: mapCenter[1] });
+        }
       );
       const watcherId = navigator.geolocation.watchPosition((pos) => {
         setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
       });
       return () => navigator.geolocation.clearWatch(watcherId);
     } else {
+      alert("Geolocation is not supported. Showing results for Charkhi Dadri.");
       fetchReports({ lat: mapCenter[0], lng: mapCenter[1] });
     }
-  }, [mapCenter]);
+  }, []); // The empty array [] is the crucial fix for the loop
 
   const handleMarkCompleteClick = (report) => {
     setSelectedReport(report);
@@ -63,29 +68,25 @@ export default function PickerDashboard({ user, onLogout }) {
 
   const handleCompleteSubmit = async (e) => {
     e.preventDefault();
-    if (!afterImageFile) {
-      return alert('Please upload an "after" photo.');
-    }
+    if (!afterImageFile) return alert('Please upload an "after" photo.');
     setActionLoading(true);
     
     const { data: uploadData, error: uploadError } = await supabase.storage.from('report-images').upload(`public/after_${Date.now()}_${afterImageFile.name}`, afterImageFile);
     if (uploadError) {
       setActionLoading(false);
-      return alert('Image upload failed. Please try again.');
+      return alert('Image upload failed.');
     }
 
     const { data: { publicUrl } } = supabase.storage.from('report-images').getPublicUrl(uploadData.path);
     const { error: updateError } = await supabase.from('reports').update({ status: 'completed', after_image_url: publicUrl }).eq('id', selectedReport.id);
 
     if (updateError) {
-      alert('Failed to update the report.');
+      alert('Failed to update report.');
     } else {
-      // Award points for the cleanup based on volume
       const volume = selectedReport.volume || 'Medium';
       const pointsAction = `cleanup_${volume.toLowerCase()}`;
       await supabase.rpc('award_points', { p_user_id: user.id, p_action: pointsAction });
-
-      alert('Task completed! Thank you for your hard work!');
+      alert('Task completed!');
       setReports(reports.filter(r => r.id !== selectedReport.id));
       setIsModalOpen(false);
       setAfterImageFile(null);
@@ -105,7 +106,7 @@ export default function PickerDashboard({ user, onLogout }) {
           <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">Logout</button>
         </div>
       </header>
-
+      [Image of a clean street in Charkhi Dadri]
       <main className="relative z-10 container mx-auto px-4 py-8">
         <h2 className="text-3xl font-bold text-white mb-6 text-center">Available Tasks in Charkhi Dadri</h2>
         <div className="mb-8 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl h-96">
