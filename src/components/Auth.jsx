@@ -1,6 +1,40 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
+// --- NEW: Component for the animated particles ---
+const AnimatedBackground = () => {
+  // An array to hold the properties of each particle
+  const particles = [
+    { left: '10%', duration: '20s', delay: '0s', size: '15px' },
+    { left: '20%', duration: '25s', delay: '2s', size: '25px' },
+    { left: '25%', duration: '18s', delay: '4s', size: '10px' },
+    { left: '40%', duration: '22s', delay: '0s', size: '20px' },
+    { left: '50%', duration: '30s', delay: '7s', size: '18px' },
+    { left: '65%', duration: '20s', delay: '0s', size: '15px' },
+    { left: '75%', duration: '28s', delay: '2s', size: '22px' },
+    { left: '90%', duration: '15s', delay: '5s', size: '12px' },
+  ];
+
+  return (
+    <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+      {particles.map((p, i) => (
+        <div
+          key={i}
+          className="floating-particle"
+          style={{
+            left: p.left,
+            width: p.size,
+            height: p.size,
+            animationDuration: p.duration,
+            animationDelay: p.delay,
+          }}
+        ></div>
+      ))}
+    </div>
+  );
+};
+
+
 export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -74,19 +108,23 @@ export default function Auth() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900 text-gray-300 overflow-hidden" style={{ perspective: '1000px' }}>
-      {/* Background spotlight effect */}
+    <div className="relative flex items-center justify-center min-h-screen bg-gray-900 text-gray-300 overflow-hidden" style={{ perspective: '1000px' }}>
+      
+      {/* --- NEW: Thematic animated background --- */}
+      <AnimatedBackground />
+
+      {/* Background spotlight effect (now z-10) */}
       <div
-        className="pointer-events-none fixed inset-0 z-0 transition duration-300"
+        className="pointer-events-none fixed inset-0 z-10 transition duration-300"
         style={{
           background: `radial-gradient(600px at ${mousePosition.x}px ${mousePosition.y}px, rgba(29, 78, 216, 0.15), transparent 80%)`
         }}
       ></div>
 
-      {/* The form card with a "glassmorphism" and 3D tilt effect */}
+      {/* The form card with a "glassmorphism" and 3D tilt effect (now z-20) */}
       <div
         ref={cardRef}
-        className="relative z-10 w-full max-w-md p-8 space-y-6 bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl backdrop-blur-xl transition-transform duration-300 ease-out"
+        className="relative z-20 w-full max-w-md p-8 space-y-6 bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl backdrop-blur-xl transition-transform duration-300 ease-out"
         style={{ transform: `rotateX(${rotate.x}deg) rotateY(${rotate.y}deg)` }}
       >
         <div className="text-center">
