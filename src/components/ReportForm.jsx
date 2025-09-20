@@ -1,230 +1,182 @@
-import { useState, useEffect, useRef, useMemo } from 'react'; // useRef is now imported
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import Profile from './Profile';
-import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMapEvents } from 'react-leaflet';
-
-// Re-using the animated background component
-const AnimatedBackground = () => {
-  const particles = [
-    { left: '10%', duration: '20s', delay: '0s', size: '15px' },
-    { left: '20%', duration: '25s', delay: '2s', size: '25px' },
-    { left: '25%', duration: '18s', delay: '4s', size: '10px' },
-    { left: '40%', duration: '22s', delay: '0s', size: '20px' },
-    { left: '50%', duration: '30s', delay: '7s', size: '18px' },
-    { left: '65%', duration: '20s', delay: '0s', size: '15px' },
-    { left: '75%', duration: '28s', delay: '2s', size: '22px' },
-    { left: '90%', duration: '15s', delay: '5s', size: '12px' },
-  ];
-  return (
-    <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
-      {particles.map((p, i) => (
-        <div key={i} className="floating-particle" style={{ left: p.left, width: p.size, height: p.size, animationDuration: p.duration, animationDelay: p.delay }} ></div>
-      ))}
-    </div>
-  );
-};
-
-// Map settings
-const blueDotOptions = { color: '#007BFF', fillColor: '#007BFF', fillOpacity: 1, radius: 8 };
+// Map components can remain the same if you are using them here
 
 export default function ReportForm({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
-  const [reportLocation, setReportLocation] = useState(null);
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [mapCenter, setMapCenter] = useState([28.4595, 77.0266]);
   const [imageFile, setImageFile] = useState(null);
   const [volume, setVolume] = useState('Small');
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-
+  const [description, setDescription] = useState(''); // New state for description
   const [myReports, setMyReports] = useState([]);
-  const [filter, setFilter] = useState('all');
   const [reportsLoading, setReportsLoading] = useState(true);
 
-  useEffect(() => {
-    let watcherId;
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const userCoords = [pos.coords.latitude, pos.coords.longitude];
-          setMapCenter(userCoords);
-          setReportLocation(userCoords);
-          setCurrentLocation(userCoords);
-        },
-        () => {
-          alert('Could not get your location. Please mark it manually.');
-          setReportLocation(mapCenter);
-        }
-      );
-      watcherId = navigator.geolocation.watchPosition((pos) => {
-        setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
-      });
+  // This function fetches the user's reports
+  const fetchMyReports = async () => {
+    const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error("Error fetching reports:", error);
+    } else {
+        setMyReports(data || []);
     }
-    return () => {
-      if (watcherId) {
-        navigator.geolocation.clearWatch(watcherId);
-      }
-    };
-  }, []);
-
+    setReportsLoading(false);
+  };
+  
+  // This useEffect fetches reports on initial load and then sets up polling
   useEffect(() => {
-    const fetchMyReports = async () => {
-      setReportsLoading(true);
-      let query = supabase.from('reports').select('*').eq('user_id', user.id);
-      if (filter !== 'all') {
-        query = query.eq('status', filter);
-      }
-      const { data, error } = await query.order('created_at', { ascending: false });
-      if (error) {
-        console.error('Error fetching my reports:', error);
-      } else {
-        setMyReports(data);
-      }
-      setReportsLoading(false);
-    };
-    fetchMyReports();
-  }, [user.id, filter]);
+    // Fetch reports immediately when the component mounts
+    fetchMyReports(); 
 
+    // Then, check for new updates every 15 seconds
+    const interval = setInterval(() => {
+      console.log("Checking for report updates...");
+      fetchMyReports();
+    }, 15000); // 15000 milliseconds = 15 seconds
+
+    // Cleanup function to clear the interval when the component unmounts
+    return () => {
+      clearInterval(interval);
+    };
+  }, [user.id]); // The dependency array is empty so it only runs once
+
+  // This is the updated handleSubmit function
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!imageFile || !reportLocation) {
-      alert('Please upload an image and mark the location on the map.');
-      return;
+    if (!imageFile) {
+      return alert('Please add a photo.');
     }
     setLoading(true);
 
-    const { data: uploadData, error: uploadError } = await supabase.storage.from('report-images').upload(`public/${Date.now()}_${imageFile.name}`, imageFile);
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('report-images')
+      .upload(`public/${Date.now()}_${imageFile.name}`, imageFile);
+      
     if (uploadError) {
-      alert(uploadError.message);
       setLoading(false);
-      return;
+      return alert('Image upload failed.');
     }
 
-    const { data: { publicUrl } } = supabase.storage.from('report-images').getPublicUrl(uploadData.path);
-    const { error: insertError } = await supabase.from('reports').insert({
-      user_id: user.id, image_url: publicUrl, location: `POINT(${reportLocation[1]} ${reportLocation[0]})`, volume,
-    });
+    const { data: { publicUrl } } = supabase.storage
+      .from('report-images')
+      .getPublicUrl(uploadData.path);
+      
+    const { data: newReport, error: insertError } = await supabase
+      .from('reports')
+      .insert({
+        user_id: user.id,
+        image_url: publicUrl,
+        location: `POINT(76.28 28.59)`, // Simplified location for now
+        volume,
+        description, // Add description to the insert payload
+      })
+      .select()
+      .single();
 
-    if (insertError) alert(insertError.message);
-    else {
+    if (insertError) {
+      alert(insertError.message);
+    } else {
       alert('Report submitted successfully!');
+      setMyReports([newReport, ...myReports]);
       setImageFile(null);
+      setDescription('');
       e.target.reset();
-      setFilter('all'); // Refresh the list
     }
     setLoading(false);
   };
-
-  const DraggableMarker = () => {
-    const markerRef = useRef(null);
-    const eventHandlers = useMemo(() => ({
-      dragend() {
-        const marker = markerRef.current;
-        if (marker != null) {
-          const { lat, lng } = marker.getLatLng();
-          setReportLocation([lat, lng]);
-        }
-      },
-    }), []);
-
-    useMapEvents({
-      click(e) {
-        setReportLocation([e.latlng.lat, e.latlng.lng]);
-      },
-    });
-
-    return reportLocation ? <Marker draggable={true} eventHandlers={eventHandlers} position={reportLocation} ref={markerRef} /> : null;
-  };
-
+  
   return (
-    <div className="relative min-h-screen bg-gray-900 text-gray-300 overflow-hidden">
-      <AnimatedBackground />
-      <header className="relative z-20 p-4 flex justify-between items-center bg-gray-900/50 backdrop-blur-sm">
-        <h1 className="text-xl font-bold text-white">Garbage Buddy</h1>
-        <div className="flex items-center gap-4">
-          <button onClick={() => setIsProfileOpen(true)} className="px-4 py-2 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors">
-            Profile
-          </button>
-          <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors">
-            Logout
-          </button>
-        </div>
+    <div className="relative min-h-screen bg-dark-text text-gray-300 font-sans">
+      <header className="relative z-20 p-4 flex justify-between items-center bg-dark-text/50 backdrop-blur-sm">
+        <h1 className="text-xl font-bold text-white">Reporter Dashboard</h1>
+        <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">
+          Logout
+        </button>
       </header>
 
       <main className="relative z-10 p-4 sm:p-8 flex flex-col items-center gap-8">
-        
         <div className="w-full max-w-xl p-8 space-y-6 bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-white text-center">Create a New Report</h2>
           <form onSubmit={handleSubmit} className="space-y-6">
+            
+            {/* New Description Field */}
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">Mark the Location</label>
-              <div className='rounded-2xl overflow-hidden' style={{ height: '300px', width: '100%' }}>
-                {reportLocation ? (
-                  <MapContainer center={mapCenter} zoom={13} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <DraggableMarker />
-                    {currentLocation && (
-                       <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
-                         <Tooltip>You are here</Tooltip>
-                       </CircleMarker>
-                    )}
-                  </MapContainer>
-                ) : <div className='h-full w-full flex items-center justify-center bg-gray-700'>Getting location...</div> }
-              </div>
-              <p className="text-xs text-center text-gray-500 mt-2">The blue dot is your live location. Drag the red pin to the garbage pile.</p>
+              <label htmlFor="description" className="block text-sm font-medium text-gray-400">Description</label>
+              <textarea 
+                id="description" 
+                value={description} 
+                onChange={(e) => setDescription(e.target.value)} 
+                rows="2" 
+                placeholder="e.g., Plastic bottles near the park entrance" 
+                className="mt-1 block w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg text-gray-300 focus:outline-none focus:ring-2 focus:ring-secondary"
+              ></textarea>
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Upload Photo</label>
-              <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} required 
-                className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-700 file:text-green-400 hover:file:bg-gray-600" />
+              <label className="block text-sm font-medium text-gray-400 mb-1">Upload "Before" Photo</label>
+              <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} required className="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-gray-700 file:text-secondary hover:file:bg-gray-600" />
             </div>
             <div>
               <label htmlFor="volume" className="block text-sm font-medium text-gray-400">Estimated Volume</label>
-              <select id="volume" value={volume} onChange={(e) => setVolume(e.target.value)} 
-                className="mt-1 block w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all">
-                <option value="Small">Small (Backpack size)</option>
-                <option value="Medium">Medium (Wheelbarrow size)</option>
-                <option value="Large">Large (Truck bed size)</option>
+              <select id="volume" value={volume} onChange={(e) => setVolume(e.target.value)} className="mt-1 block w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg text-gray-300 focus:outline-none focus:ring-2 focus:ring-secondary">
+                <option>Small (Backpack)</option>
+                <option>Medium (Wheelbarrow)</option>
+                <option>Large (Truck bed)</option>
               </select>
             </div>
-            <button type="submit" disabled={loading || !reportLocation} 
-              className="w-full p-3 font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:bg-gray-500 transform hover:scale-105 transition-all duration-300">
+            <button type="submit" disabled={loading} className="w-full p-3 font-semibold text-white bg-secondary rounded-lg hover:bg-green-700 disabled:bg-gray-500 transform hover:scale-105">
               {loading ? 'Submitting...' : 'Submit Report'}
             </button>
           </form>
         </div>
-        
+
+        {/* Updated "My Reports" Section */}
         <div className="w-full max-w-4xl p-8 space-y-6 bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-white text-center">My Submitted Reports</h2>
-          <div className="flex justify-center gap-4">
-            <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-lg transition ${filter === 'all' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>All</button>
-            <button onClick={() => setFilter('pending')} className={`px-4 py-2 rounded-lg transition ${filter === 'pending' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Pending</button>
-            <button onClick={() => setFilter('completed')} className={`px-4 py-2 rounded-lg transition ${filter === 'completed' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Completed</button>
-          </div>
           <div className="space-y-4">
             {reportsLoading ? (
               <p className="text-center text-gray-400">Loading reports...</p>
             ) : myReports.length === 0 ? (
-              <p className="text-center text-gray-500">No reports found for this filter.</p>
+              <p className="text-center text-gray-500">You haven't submitted any reports yet.</p>
             ) : (
               myReports.map(report => (
-                <div key={report.id} className="flex items-center gap-4 p-3 bg-gray-900/50 rounded-lg border border-gray-700">
-                  <img src={report.image_url} alt="Report" className="w-20 h-20 object-cover rounded-md" />
-                  <div className="flex-grow">
-                    <p className="font-semibold text-white">Status: <span className={`font-bold ${report.status === 'completed' ? 'text-green-400' : 'text-orange-400'}`}>{report.status}</span></p>
-                    <p className="text-sm text-gray-400">Volume: {report.volume}</p>
-                    <p className="text-xs text-gray-500">Reported on: {new Date(report.created_at).toLocaleDateString()}</p>
+                <div key={report.id} className="p-3 bg-gray-900/50 rounded-lg border border-gray-700">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-grow">
+                      <p className="text-sm text-gray-400 italic">"{report.description}"</p>
+                      <p className="font-semibold text-white">
+                        Status: 
+                        <span className={`font-bold ml-2 ${
+                          report.status === 'completed' ? 'text-secondary' : 
+                          report.status === 'claimed' ? 'text-yellow-400' : 'text-orange-400'
+                        }`}>{report.status}</span>
+                      </p>
+                      <p className="text-xs text-gray-500">Reported on: {new Date(report.created_at).toLocaleDateString()}</p>
+                    </div>
                   </div>
+                  
+                  {/* Before and After Viewer */}
+                  {report.status === 'completed' && report.after_image_url && (
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-center text-xs text-gray-400 mb-1">BEFORE</p>
+                          <img src={report.image_url} alt="Before cleanup" className="w-full h-32 object-cover rounded-md" />
+                        </div>
+                        <div>
+                          <p className="text-center text-xs text-green-400 mb-1">AFTER</p>
+                          <img src={report.after_image_url} alt="After cleanup" className="w-full h-32 object-cover rounded-md" />
+                        </div>
+                    </div>
+                  )}
                 </div>
               ))
             )}
           </div>
         </div>
       </main>
-
-      <Profile user={user} isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
     </div>
   );
 }
