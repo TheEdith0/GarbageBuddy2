@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { MapContainer, TileLayer, Marker, useMapEvents, CircleMarker, Tooltip } from 'react-leaflet'; // <-- Add CircleMarker and Tooltip
+import { MapContainer, TileLayer, Marker, useMapEvents, CircleMarker, Tooltip } from 'react-leaflet';
 import Profile from './Profile';
 
 export default function ReportForm({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [imageFile, setImageFile] = useState(null);
-  const [volume, setVolume] = useState('Small');
+  const [volume, setVolume] = useState('Small'); // Default value matches the new option value
   const [description, setDescription] = useState('');
   const [myReports, setMyReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(true);
 
   const [reportLocation, setReportLocation] = useState(null);
-  const [currentLocation, setCurrentLocation] = useState(null); // State for blue dot
+  const [currentLocation, setCurrentLocation] = useState(null);
   const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Charkhi Dadri
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
@@ -38,14 +38,13 @@ export default function ReportForm({ user, onLogout }) {
           const userCoords = [pos.coords.latitude, pos.coords.longitude];
           setMapCenter(userCoords);
           setReportLocation(userCoords);
-          setCurrentLocation(userCoords); // Set current location
+          setCurrentLocation(userCoords);
         },
         () => {
           alert('Could not get your location. Please mark it manually.');
           setReportLocation(mapCenter);
         }
       );
-      // Watch for live location changes
       watcherId = navigator.geolocation.watchPosition((pos) => {
         setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
       });
@@ -122,7 +121,6 @@ export default function ReportForm({ user, onLogout }) {
                   <MapContainer center={mapCenter} zoom={13} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
                     <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
                     <DraggableMarker />
-                    {/* --- New Blue Dot for Current Location --- */}
                     {currentLocation && (
                       <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
                         <Tooltip>You are here</Tooltip>
@@ -144,11 +142,18 @@ export default function ReportForm({ user, onLogout }) {
             </div>
             <div>
               <label htmlFor="volume" className="block text-sm font-medium text-gray-400">Estimated Volume</label>
-              <select id="volume" value={volume} onChange={(e) => setVolume(e.target.value)} className="mt-1 block w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg text-gray-300 focus:outline-none focus:ring-2 focus:ring-secondary">
-                <option>Small (Backpack)</option>
-                <option>Medium (Wheelbarrow)</option>
-                <option>Large (Truck bed)</option>
+              {/* --- THIS IS THE FIX --- */}
+              <select 
+                id="volume" 
+                value={volume} 
+                onChange={(e) => setVolume(e.target.value)} 
+                className="mt-1 block w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg text-gray-300 focus:outline-none focus:ring-2 focus:ring-secondary"
+              >
+                <option value="Small">Small (Backpack)</option>
+                <option value="Medium">Medium (Wheelbarrow)</option>
+                <option value="Large">Large (Truck bed)</option>
               </select>
+              {/* --- END OF FIX --- */}
             </div>
             <button type="submit" disabled={loading} className="w-full p-3 font-semibold text-white bg-secondary rounded-lg hover:bg-green-700 disabled:bg-gray-500 transform hover:scale-105">
               {loading ? 'Submitting...' : 'Submit Report'}
