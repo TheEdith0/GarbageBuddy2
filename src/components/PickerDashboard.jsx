@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Tooltip } from 'react-leaflet'; // <-- Add CircleMarker and Tooltip
+import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Tooltip } from 'react-leaflet';
 import Profile from './Profile';
 
-// Modal component remains the same
+// A reusable Modal component for the photo upload prompt
 const Modal = ({ isOpen, children }) => {
   if (!isOpen) return null;
   return (
@@ -16,17 +16,15 @@ const Modal = ({ isOpen, children }) => {
 export default function PickerDashboard({ user, onLogout }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Charkhi Dadri
-  const [currentLocation, setCurrentLocation] = useState(null); // <-- New state for blue dot
+  const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Centered on Charkhi Dadri
+  const [currentLocation, setCurrentLocation] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [afterImageFile, setAfterImageFile] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // This useEffect now also tracks the user's live location
   useEffect(() => {
-    // Fetch initial reports
     const fetchReports = async (location) => {
       setLoading(true);
       const { data, error } = await supabase.rpc('nearby_reports', { lat: location.lat, long: location.lng });
@@ -39,7 +37,6 @@ export default function PickerDashboard({ user, onLogout }) {
       setLoading(false);
     };
 
-    // Get user's location
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -48,23 +45,17 @@ export default function PickerDashboard({ user, onLogout }) {
           setCurrentLocation(userCoords);
           fetchReports({ lat: userCoords[0], lng: userCoords[1] });
         },
-        () => {
-          // Fallback if location is denied
-          fetchReports({ lat: mapCenter[0], lng: mapCenter[1] });
-        }
+        () => { fetchReports({ lat: mapCenter[0], lng: mapCenter[1] }); }
       );
-      // Watch for live location changes to update the blue dot
       const watcherId = navigator.geolocation.watchPosition((pos) => {
         setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
       });
       return () => navigator.geolocation.clearWatch(watcherId);
     } else {
-      // Fallback for browsers without geolocation
       fetchReports({ lat: mapCenter[0], lng: mapCenter[1] });
     }
-  }, []); // Empty dependency array ensures this runs only once
+  }, [mapCenter]);
 
-  // handleCompleteSubmit and other functions remain the same...
   const handleMarkCompleteClick = (report) => {
     setSelectedReport(report);
     setIsModalOpen(true);
@@ -72,22 +63,29 @@ export default function PickerDashboard({ user, onLogout }) {
 
   const handleCompleteSubmit = async (e) => {
     e.preventDefault();
-    if (!afterImageFile) return alert('Please upload an "after" photo.');
+    if (!afterImageFile) {
+      return alert('Please upload an "after" photo.');
+    }
     setActionLoading(true);
     
     const { data: uploadData, error: uploadError } = await supabase.storage.from('report-images').upload(`public/after_${Date.now()}_${afterImageFile.name}`, afterImageFile);
     if (uploadError) {
       setActionLoading(false);
-      return alert('Image upload failed.');
+      return alert('Image upload failed. Please try again.');
     }
 
     const { data: { publicUrl } } = supabase.storage.from('report-images').getPublicUrl(uploadData.path);
     const { error: updateError } = await supabase.from('reports').update({ status: 'completed', after_image_url: publicUrl }).eq('id', selectedReport.id);
 
     if (updateError) {
-      alert('Failed to update report.');
+      alert('Failed to update the report.');
     } else {
-      alert('Task completed!');
+      // Award points for the cleanup based on volume
+      const volume = selectedReport.volume || 'Medium';
+      const pointsAction = `cleanup_${volume.toLowerCase()}`;
+      await supabase.rpc('award_points', { p_user_id: user.id, p_action: pointsAction });
+
+      alert('Task completed! Thank you for your hard work!');
       setReports(reports.filter(r => r.id !== selectedReport.id));
       setIsModalOpen(false);
       setAfterImageFile(null);
@@ -115,7 +113,6 @@ export default function PickerDashboard({ user, onLogout }) {
             <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', backgroundColor: '#1F2937' }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap'/>
               
-              {/* --- New Blue Dot for Current Location --- */}
               {currentLocation && (
                 <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
                   <Tooltip>You are here</Tooltip>
@@ -136,7 +133,7 @@ export default function PickerDashboard({ user, onLogout }) {
             </MapContainer>
           )}
         </div>
-        {/* Rest of the component JSX remains the same */}
+        
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {reports.map((report) => (
             <div key={report.id} className="bg-gray-800/50 border border-gray-700 rounded-2xl shadow-lg backdrop-blur-xl overflow-hidden flex flex-col">

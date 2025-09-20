@@ -6,7 +6,7 @@ import Profile from './Profile';
 export default function ReportForm({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
   const [imageFile, setImageFile] = useState(null);
-  const [volume, setVolume] = useState('Small'); // Default value matches the new option value
+  const [volume, setVolume] = useState('Small');
   const [description, setDescription] = useState('');
   const [myReports, setMyReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(true);
@@ -16,7 +16,6 @@ export default function ReportForm({ user, onLogout }) {
   const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Charkhi Dadri
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  // This useEffect fetches reports and sets up polling
   useEffect(() => {
     const fetchMyReports = async () => {
       const { data, error } = await supabase.from('reports').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
@@ -29,7 +28,6 @@ export default function ReportForm({ user, onLogout }) {
     return () => clearInterval(interval);
   }, [user.id]);
 
-  // This useEffect handles geolocation
   useEffect(() => {
     let watcherId;
     if (navigator.geolocation) {
@@ -75,7 +73,10 @@ export default function ReportForm({ user, onLogout }) {
     if (insertError) {
       alert(insertError.message);
     } else {
-      alert('Report submitted successfully!');
+      // Award points for submitting the report
+      await supabase.rpc('award_points', { p_user_id: user.id, p_action: 'report_submit' });
+
+      alert('Report submitted successfully! +10 points!');
       setMyReports([newReport, ...myReports]);
       setImageFile(null);
       setDescription('');
@@ -142,18 +143,11 @@ export default function ReportForm({ user, onLogout }) {
             </div>
             <div>
               <label htmlFor="volume" className="block text-sm font-medium text-gray-400">Estimated Volume</label>
-              {/* --- THIS IS THE FIX --- */}
-              <select 
-                id="volume" 
-                value={volume} 
-                onChange={(e) => setVolume(e.target.value)} 
-                className="mt-1 block w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg text-gray-300 focus:outline-none focus:ring-2 focus:ring-secondary"
-              >
+              <select id="volume" value={volume} onChange={(e) => setVolume(e.target.value)} className="mt-1 block w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg text-gray-300 focus:outline-none focus:ring-2 focus:ring-secondary">
                 <option value="Small">Small (Backpack)</option>
                 <option value="Medium">Medium (Wheelbarrow)</option>
                 <option value="Large">Large (Truck bed)</option>
               </select>
-              {/* --- END OF FIX --- */}
             </div>
             <button type="submit" disabled={loading} className="w-full p-3 font-semibold text-white bg-secondary rounded-lg hover:bg-green-700 disabled:bg-gray-500 transform hover:scale-105">
               {loading ? 'Submitting...' : 'Submit Report'}
