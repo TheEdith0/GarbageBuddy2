@@ -145,7 +145,19 @@ export default function PickerDashboard({ user, onLogout }) {
                     <p className="font-semibold text-white">{report.dist_meters.toFixed(0)}m away</p>
                     <p className="text-sm text-gray-400">Status: <span className="font-semibold text-orange-400">{report.status.toUpperCase()}</span></p>
                 </div>
-                <button onClick={() => handleMarkCompleteClick(report)} className="mt-4 w-full px-4 py-2 font-semibold text-white bg-secondary rounded-lg hover:bg-green-700 transition-colors">
+
+                {/* --- NEW: Get Directions Button --- */}
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${report.latitude},${report.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full text-center mb-2 px-4 py-2 font-semibold text-white bg-primary rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Get Directions
+                </a>
+                {/* --- END OF NEW CODE --- */}
+
+                <button onClick={() => handleMarkCompleteClick(report)} className="w-full px-4 py-2 font-semibold text-white bg-secondary rounded-lg hover:bg-green-700 transition-colors">
                   Mark as Completed
                 </button>
               </div>
