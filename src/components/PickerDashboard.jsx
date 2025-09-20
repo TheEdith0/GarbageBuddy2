@@ -106,7 +106,7 @@ export default function PickerDashboard({ user, onLogout }) {
           <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">Logout</button>
         </div>
       </header>
-      [Image of a clean street in Charkhi Dadri]
+      
       <main className="relative z-10 container mx-auto px-4 py-8">
         <h2 className="text-3xl font-bold text-white mb-6 text-center">Available Tasks in Charkhi Dadri</h2>
         <div className="mb-8 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl h-96">
