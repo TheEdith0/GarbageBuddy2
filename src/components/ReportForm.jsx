@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react'; // useRef is now imported
 import { supabase } from '../supabaseClient';
 import Profile from './Profile';
-// --- CORRECTED IMPORT LINE ---
 import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMapEvents } from 'react-leaflet';
 
 // Re-using the animated background component
@@ -30,12 +29,16 @@ const blueDotOptions = { color: '#007BFF', fillColor: '#007BFF', fillOpacity: 1,
 
 export default function ReportForm({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
-  const [reportLocation, setReportLocation] = useState(null); // The draggable pin
-  const [currentLocation, setCurrentLocation] = useState(null); // The user's live blue dot
-  const [mapCenter, setMapCenter] = useState([28.4595, 77.0266]); // Default center
+  const [reportLocation, setReportLocation] = useState(null);
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [mapCenter, setMapCenter] = useState([28.4595, 77.0266]);
   const [imageFile, setImageFile] = useState(null);
   const [volume, setVolume] = useState('Small');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  const [myReports, setMyReports] = useState([]);
+  const [filter, setFilter] = useState('all');
+  const [reportsLoading, setReportsLoading] = useState(true);
 
   useEffect(() => {
     let watcherId;
@@ -56,13 +59,30 @@ export default function ReportForm({ user, onLogout }) {
         setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
       });
     }
-
     return () => {
       if (watcherId) {
         navigator.geolocation.clearWatch(watcherId);
       }
     };
   }, []);
+
+  useEffect(() => {
+    const fetchMyReports = async () => {
+      setReportsLoading(true);
+      let query = supabase.from('reports').select('*').eq('user_id', user.id);
+      if (filter !== 'all') {
+        query = query.eq('status', filter);
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) {
+        console.error('Error fetching my reports:', error);
+      } else {
+        setMyReports(data);
+      }
+      setReportsLoading(false);
+    };
+    fetchMyReports();
+  }, [user.id, filter]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -89,24 +109,22 @@ export default function ReportForm({ user, onLogout }) {
       alert('Report submitted successfully!');
       setImageFile(null);
       e.target.reset();
+      setFilter('all'); // Refresh the list
     }
     setLoading(false);
   };
-  
+
   const DraggableMarker = () => {
     const markerRef = useRef(null);
-    const eventHandlers = useMemo(
-      () => ({
-        dragend() {
-          const marker = markerRef.current;
-          if (marker != null) {
-            const { lat, lng } = marker.getLatLng();
-            setReportLocation([lat, lng]);
-          }
-        },
-      }),
-      [],
-    );
+    const eventHandlers = useMemo(() => ({
+      dragend() {
+        const marker = markerRef.current;
+        if (marker != null) {
+          const { lat, lng } = marker.getLatLng();
+          setReportLocation([lat, lng]);
+        }
+      },
+    }), []);
 
     useMapEvents({
       click(e) {
@@ -114,14 +132,7 @@ export default function ReportForm({ user, onLogout }) {
       },
     });
 
-    return reportLocation === null ? null : (
-      <Marker
-        draggable={true}
-        eventHandlers={eventHandlers}
-        position={reportLocation}
-        ref={markerRef}>
-      </Marker>
-    );
+    return reportLocation ? <Marker draggable={true} eventHandlers={eventHandlers} position={reportLocation} ref={markerRef} /> : null;
   };
 
   return (
@@ -139,11 +150,11 @@ export default function ReportForm({ user, onLogout }) {
         </div>
       </header>
 
-      <main className="relative z-10 p-4 sm:p-8 flex justify-center items-start">
+      <main className="relative z-10 p-4 sm:p-8 flex flex-col items-center gap-8">
+        
         <div className="w-full max-w-xl p-8 space-y-6 bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-white text-center">Create a New Report</h2>
           <form onSubmit={handleSubmit} className="space-y-6">
-            
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">Mark the Location</label>
               <div className='rounded-2xl overflow-hidden' style={{ height: '300px', width: '100%' }}>
@@ -164,7 +175,6 @@ export default function ReportForm({ user, onLogout }) {
               </div>
               <p className="text-xs text-center text-gray-500 mt-2">The blue dot is your live location. Drag the red pin to the garbage pile.</p>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1">Upload Photo</label>
               <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} required 
@@ -184,6 +194,33 @@ export default function ReportForm({ user, onLogout }) {
               {loading ? 'Submitting...' : 'Submit Report'}
             </button>
           </form>
+        </div>
+        
+        <div className="w-full max-w-4xl p-8 space-y-6 bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl backdrop-blur-xl">
+          <h2 className="text-2xl font-bold text-white text-center">My Submitted Reports</h2>
+          <div className="flex justify-center gap-4">
+            <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-lg transition ${filter === 'all' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>All</button>
+            <button onClick={() => setFilter('pending')} className={`px-4 py-2 rounded-lg transition ${filter === 'pending' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Pending</button>
+            <button onClick={() => setFilter('completed')} className={`px-4 py-2 rounded-lg transition ${filter === 'completed' ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Completed</button>
+          </div>
+          <div className="space-y-4">
+            {reportsLoading ? (
+              <p className="text-center text-gray-400">Loading reports...</p>
+            ) : myReports.length === 0 ? (
+              <p className="text-center text-gray-500">No reports found for this filter.</p>
+            ) : (
+              myReports.map(report => (
+                <div key={report.id} className="flex items-center gap-4 p-3 bg-gray-900/50 rounded-lg border border-gray-700">
+                  <img src={report.image_url} alt="Report" className="w-20 h-20 object-cover rounded-md" />
+                  <div className="flex-grow">
+                    <p className="font-semibold text-white">Status: <span className={`font-bold ${report.status === 'completed' ? 'text-green-400' : 'text-orange-400'}`}>{report.status}</span></p>
+                    <p className="text-sm text-gray-400">Volume: {report.volume}</p>
+                    <p className="text-xs text-gray-500">Reported on: {new Date(report.created_at).toLocaleDateString()}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </main>
 
