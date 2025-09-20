@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import Profile from './Profile';
-import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip } from 'react-leaflet';
+// --- CORRECTED IMPORT LINE ---
+import { MapContainer, TileLayer, Marker, CircleMarker, Tooltip, useMapEvents } from 'react-leaflet';
 
 // Re-using the animated background component
 const AnimatedBackground = () => {
@@ -25,11 +26,6 @@ const AnimatedBackground = () => {
 };
 
 // Map settings
-const containerStyle = {
-  width: '100%',
-  height: '300px',
-  borderRadius: '1rem',
-};
 const blueDotOptions = { color: '#007BFF', fillColor: '#007BFF', fillOpacity: 1, radius: 8 };
 
 export default function ReportForm({ user, onLogout }) {
@@ -41,11 +37,9 @@ export default function ReportForm({ user, onLogout }) {
   const [volume, setVolume] = useState('Small');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  // Get user's current location to center the map and set the blue dot
   useEffect(() => {
     let watcherId;
     if (navigator.geolocation) {
-      // Get initial position
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const userCoords = [pos.coords.latitude, pos.coords.longitude];
@@ -55,22 +49,20 @@ export default function ReportForm({ user, onLogout }) {
         },
         () => {
           alert('Could not get your location. Please mark it manually.');
-          setReportLocation(mapCenter); // Set pin to default if denied
+          setReportLocation(mapCenter);
         }
       );
-      // Watch for continued changes
       watcherId = navigator.geolocation.watchPosition((pos) => {
         setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
       });
     }
 
-    // Cleanup function to clear the watcher when the component unmounts
     return () => {
       if (watcherId) {
         navigator.geolocation.clearWatch(watcherId);
       }
     };
-  }, []); // The empty array ensures this runs only once
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -162,7 +154,6 @@ export default function ReportForm({ user, onLogout }) {
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
                     <DraggableMarker />
-                    {/* --- NEW: Blue dot for current location --- */}
                     {currentLocation && (
                        <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
                          <Tooltip>You are here</Tooltip>
