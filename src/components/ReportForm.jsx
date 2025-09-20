@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from 'react'; // <-- Restore hooks
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'; // <-- Restore map components
-import Profile from './Profile'; // <-- Restore profile import
+import { MapContainer, TileLayer, Marker, useMapEvents, CircleMarker, Tooltip } from 'react-leaflet'; // <-- Add CircleMarker and Tooltip
+import Profile from './Profile';
 
 export default function ReportForm({ user, onLogout }) {
   const [loading, setLoading] = useState(false);
@@ -11,28 +11,25 @@ export default function ReportForm({ user, onLogout }) {
   const [myReports, setMyReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(true);
 
-  // --- Restore map and profile state ---
   const [reportLocation, setReportLocation] = useState(null);
-  const [currentLocation, setCurrentLocation] = useState(null);
+  const [currentLocation, setCurrentLocation] = useState(null); // State for blue dot
   const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Charkhi Dadri
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  // This function fetches the user's reports
-  const fetchMyReports = async () => {
-    const { data, error } = await supabase.from('reports').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
-    if (error) console.error("Error fetching reports:", error);
-    else setMyReports(data || []);
-    setReportsLoading(false);
-  };
-  
-  // This useEffect fetches reports on load and then sets up polling
+  // This useEffect fetches reports and sets up polling
   useEffect(() => {
+    const fetchMyReports = async () => {
+      const { data, error } = await supabase.from('reports').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (error) console.error("Error fetching reports:", error);
+      else setMyReports(data || []);
+      setReportsLoading(false);
+    };
     fetchMyReports(); 
     const interval = setInterval(() => fetchMyReports(), 15000); 
     return () => clearInterval(interval);
   }, [user.id]);
 
-  // --- Restore geolocation useEffect ---
+  // This useEffect handles geolocation
   useEffect(() => {
     let watcherId;
     if (navigator.geolocation) {
@@ -41,13 +38,14 @@ export default function ReportForm({ user, onLogout }) {
           const userCoords = [pos.coords.latitude, pos.coords.longitude];
           setMapCenter(userCoords);
           setReportLocation(userCoords);
-          setCurrentLocation(userCoords);
+          setCurrentLocation(userCoords); // Set current location
         },
         () => {
           alert('Could not get your location. Please mark it manually.');
-          setReportLocation(mapCenter); // Fallback to default
+          setReportLocation(mapCenter);
         }
       );
+      // Watch for live location changes
       watcherId = navigator.geolocation.watchPosition((pos) => {
         setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
       });
@@ -57,9 +55,7 @@ export default function ReportForm({ user, onLogout }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!imageFile || !reportLocation) {
-      return alert('Please upload a photo and mark the location on the map.');
-    }
+    if (!imageFile || !reportLocation) return alert('Please upload a photo and mark the location.');
     setLoading(true);
 
     const { data: uploadData, error: uploadError } = await supabase.storage.from('report-images').upload(`public/${Date.now()}_${imageFile.name}`, imageFile);
@@ -72,7 +68,7 @@ export default function ReportForm({ user, onLogout }) {
     const { data: newReport, error: insertError } = await supabase.from('reports').insert({
         user_id: user.id,
         image_url: publicUrl,
-        location: `POINT(${reportLocation[1]} ${reportLocation[0]})`, // Use location from map
+        location: `POINT(${reportLocation[1]} ${reportLocation[0]})`,
         volume,
         description,
       }).select().single();
@@ -89,40 +85,28 @@ export default function ReportForm({ user, onLogout }) {
     setLoading(false);
   };
 
-  // --- Restore Draggable Marker component ---
   const DraggableMarker = () => {
     const markerRef = useRef(null);
     const eventHandlers = useMemo(() => ({
       dragend() {
         const marker = markerRef.current;
-        if (marker != null) {
-          const { lat, lng } = marker.getLatLng();
-          setReportLocation([lat, lng]);
-        }
+        if (marker != null) setReportLocation([marker.getLatLng().lat, marker.getLatLng().lng]);
       },
     }), []);
 
-    useMapEvents({
-      click(e) {
-        setReportLocation([e.latlng.lat, e.latlng.lng]);
-      },
-    });
-
+    useMapEvents({ click(e) { setReportLocation([e.latlng.lat, e.latlng.lng]); }, });
     return reportLocation ? <Marker draggable={true} eventHandlers={eventHandlers} position={reportLocation} ref={markerRef} /> : null;
   };
+
+  const blueDotOptions = { color: '#007BFF', fillColor: '#007BFF', fillOpacity: 1, radius: 8 };
   
   return (
     <div className="relative min-h-screen bg-dark-text text-gray-300 font-sans">
       <header className="relative z-20 p-4 flex justify-between items-center bg-dark-text/50 backdrop-blur-sm">
         <h1 className="text-xl font-bold text-white">Reporter Dashboard</h1>
-        {/* --- Restore Profile and Logout buttons --- */}
         <div className="flex items-center gap-4">
-          <button onClick={() => setIsProfileOpen(true)} className="px-4 py-2 font-semibold text-white bg-primary rounded-lg hover:bg-blue-700 transition-colors">
-            Profile
-          </button>
-          <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">
-            Logout
-          </button>
+          <button onClick={() => setIsProfileOpen(true)} className="px-4 py-2 font-semibold text-white bg-primary rounded-lg hover:bg-blue-700">Profile</button>
+          <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">Logout</button>
         </div>
       </header>
 
@@ -131,7 +115,6 @@ export default function ReportForm({ user, onLogout }) {
           <h2 className="text-2xl font-bold text-white text-center">Create a New Report</h2>
           <form onSubmit={handleSubmit} className="space-y-6">
             
-            {/* --- Restore Map section --- */}
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">Mark the Location</label>
               <div className='rounded-2xl overflow-hidden' style={{ height: '300px', width: '100%' }}>
@@ -139,10 +122,16 @@ export default function ReportForm({ user, onLogout }) {
                   <MapContainer center={mapCenter} zoom={13} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
                     <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
                     <DraggableMarker />
+                    {/* --- New Blue Dot for Current Location --- */}
+                    {currentLocation && (
+                      <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
+                        <Tooltip>You are here</Tooltip>
+                      </CircleMarker>
+                    )}
                   </MapContainer>
                 ) : <div className='h-full w-full flex items-center justify-center bg-gray-700'>Getting location...</div> }
               </div>
-              <p className="text-xs text-center text-gray-500 mt-2">Click or drag the pin to the garbage pile.</p>
+              <p className="text-xs text-center text-gray-500 mt-2">The blue dot is your live location. Drag the red pin to the garbage pile.</p>
             </div>
             
             <div>
@@ -199,7 +188,6 @@ export default function ReportForm({ user, onLogout }) {
         </div>
       </main>
 
-      {/* --- Restore Profile Component --- */}
       <Profile user={user} isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
     </div>
   );
