@@ -1,96 +1,75 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
-export default function PickerDashboard({ user }) {
+export default function PickerDashboard({ user, onLogout }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [location, setLocation] = useState(null);
 
-  // Function to accept a report
+  useEffect(() => {
+    const fetchReports = async (location) => {
+      const { data, error } = await supabase.rpc('nearby_reports', {
+        lat: location.lat, long: location.lng,
+      });
+      if (error) console.error("Error fetching reports:", error);
+      else setReports(data);
+      setLoading(false);
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => fetchReports({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {
+        alert('Please enable location services to find reports.');
+        setLoading(false);
+      }
+    );
+  }, []);
+
   const acceptReport = async (reportId) => {
-    const { error } = await supabase
-      .from('reports')
-      .update({ status: 'claimed', claimed_by: user.id })
-      .eq('id', reportId);
-
-    if (error) {
-      alert('Error accepting report: ' + error.message);
-    } else {
+    const { error } = await supabase.from('reports').update({ status: 'claimed', claimed_by: user.id }).eq('id', reportId);
+    if (error) alert(error.message);
+    else {
       alert('Report accepted!');
-      // Refresh the list of reports
-      fetchNearbyReports(location);
+      setReports(reports.filter(r => r.id !== reportId)); // Remove from list
     }
   };
-  
-  // Function to fetch reports
-  const fetchNearbyReports = async (currentLocation) => {
-    if (!currentLocation) return;
-    
-    // This is where you call the special SQL function
-    const { data, error } = await supabase.rpc('nearby_reports', {
-      lat: currentLocation.lat,
-      long: currentLocation.lng,
-    });
-
-    if (error) {
-      console.error('Error fetching nearby reports:', error);
-      alert('Could not fetch reports.');
-    } else {
-      setReports(data);
-    }
-    setLoading(false);
-  }
-
-  // Get picker's location and then fetch reports
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const currentLocation = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          };
-          setLocation(currentLocation);
-          fetchNearbyReports(currentLocation);
-        },
-        () => {
-          alert('Please enable location services to find nearby reports.');
-          setLoading(false);
-        }
-      );
-    }
-  }, []); // The empty array [] means this runs once when the component mounts
-
-  if (loading) {
-    return <div className="text-center p-8">Finding nearby reports...</div>;
-  }
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">Nearby Reports</h1>
-      {reports.length === 0 ? (
-        <p>No pending reports found near you. Great job!</p>
-      ) : (
+    <div className="min-h-screen bg-light-gray">
+      <header className="bg-white shadow-md">
+        <nav className="container mx-auto px-6 py-4 flex justify-between items-center">
+          <h1 className="text-xl font-bold text-primary">Picker Dashboard</h1>
+          <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600">Logout</button>
+        </nav>
+      </header>
+      <main className="container mx-auto px-6 py-8">
+        <h2 className="text-2xl font-bold text-dark-text mb-6">Available Tasks Near You</h2>
+        {loading && <p className="text-center text-gray-500">Finding nearby reports...</p>}
+        {!loading && reports.length === 0 && (
+          <div className="text-center py-10 px-6 bg-white rounded-xl shadow-lg">
+            <h3 className="text-xl font-semibold text-dark-text">All Clean!</h3>
+            <p className="text-gray-500 mt-2">There are no pending reports in your area. Thank you for your work!</p>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {reports.map((report) => (
-            <div key={report.id} className="border rounded-lg shadow-lg overflow-hidden">
-              <img src={report.image_url} alt="Garbage report" className="w-full h-48 object-cover"/>
-              <div className="p-4">
-                <p className="text-sm text-gray-600">
-                  Distance: {report.dist_meters.toFixed(0)} meters away
-                </p>
-                <p className="text-lg font-semibold">Status: {report.status}</p>
-                <button
-                  onClick={() => acceptReport(report.id)}
-                  className="mt-4 w-full bg-green-500 text-white font-bold py-2 px-4 rounded hover:bg-green-600"
-                >
-                  Accept Task
-                </button>
+            <div key={report.id} className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
+              <img src={report.image_url} alt="Garbage report" className="w-full h-48 object-cover" />
+              <div className="p-4 flex flex-col flex-grow">
+                <p className="font-semibold text-dark-text">Distance: {report.dist_meters.toFixed(0)}m away</p>
+                <p className="text-sm text-gray-500 mb-4">Status: <span className="font-semibold text-orange-500">{report.status.toUpperCase()}</span></p>
+                <div className="mt-auto">
+                   <a href={`https://www.google.com/maps?q=${report.latitude},${report.longitude}`} target="_blank" rel="noopener noreferrer" className="block w-full text-center mb-2 px-4 py-2 font-semibold text-primary bg-blue-100 rounded-lg hover:bg-blue-200 transition-colors">
+                    Get Directions
+                  </a>
+                  <button onClick={() => acceptReport(report.id)} className="w-full px-4 py-2 font-semibold text-white bg-secondary rounded-lg hover:bg-green-600 transition-colors">
+                    Accept Task
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
-      )}
+      </main>
     </div>
   );
 }

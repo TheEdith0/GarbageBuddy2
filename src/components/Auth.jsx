@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
 export default function Auth() {
@@ -7,150 +7,139 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState('reporter');
-  const [isSignUp, setIsSignUp] = useState(false); // To toggle between Login and Sign Up
+  const [isSignUp, setIsSignUp] = useState(true);
 
-  const handleLogin = async (event) => {
-    event.preventDefault();
+  // --- LOGIC FOR 3D TILT EFFECT ---
+  const cardRef = useRef(null);
+  const [rotate, setRotate] = useState({ x: 0, y: 0 });
+
+  // --- LOGIC FOR BACKGROUND SPOTLIGHT EFFECT ---
+  const [mousePosition, setMousePosition] = useState({ x: -200, y: -200 });
+
+  // Effect for the 3D card tilt
+  useEffect(() => {
+    const cardElement = cardRef.current;
+    if (!cardElement) return;
+
+    const handleMouseMove = (event) => {
+      const rect = cardElement.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+      const rotateY = 20 * ((mouseX / rect.width) - 0.5);
+      const rotateX = -20 * ((mouseY / rect.height) - 0.5);
+      setRotate({ x: rotateX, y: rotateY });
+    };
+
+    const handleMouseLeave = () => {
+      setRotate({ x: 0, y: 0 });
+    };
+
+    cardElement.addEventListener('mousemove', handleMouseMove);
+    cardElement.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      cardElement.removeEventListener('mousemove', handleMouseMove);
+      cardElement.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, []);
+
+  // Effect for the background spotlight
+  useEffect(() => {
+    const handleGlobalMouseMove = (event) => {
+      setMousePosition({ x: event.clientX, y: event.clientY });
+    };
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+    };
+  }, []);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      alert(error.error_description || error.message);
-    }
+    if (error) alert(error.message);
     setLoading(false);
   };
 
-  const handleSignup = async (event) => {
-    event.preventDefault();
-    if (!fullName) {
-      alert('Please enter your full name.');
-      return;
-    }
+  const handleSignup = async (e) => {
+    e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          role: role,
-        },
-      },
+      email, password, options: { data: { full_name: fullName, role } },
     });
-    if (error) {
-      alert(error.error_description || error.message);
-    } else {
-      alert('Success! Please check your email for a confirmation link.');
-    }
+    if (error) alert(error.message);
+    else alert('Success! Please check your email for a confirmation link.');
     setLoading(false);
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gray-100">
-      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-center text-gray-800">
-          {isSignUp ? 'Create an Account' : 'Sign In'}
-        </h2>
+    <div className="flex items-center justify-center min-h-screen bg-gray-900 text-gray-300 overflow-hidden" style={{ perspective: '1000px' }}>
+      {/* Background spotlight effect */}
+      <div
+        className="pointer-events-none fixed inset-0 z-0 transition duration-300"
+        style={{
+          background: `radial-gradient(600px at ${mousePosition.x}px ${mousePosition.y}px, rgba(29, 78, 216, 0.15), transparent 80%)`
+        }}
+      ></div>
 
-        <form onSubmit={isSignUp ? handleSignup : handleLogin} className="space-y-6">
-          {/* Email Input */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email address
-            </label>
-            <input
-              id="email"
-              className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              required
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          {/* Password Input */}
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Password
-            </label>
-            <input
-              id="password"
-              className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              type="password"
-              placeholder="Your password"
-              value={password}
-              required
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-
-          {/* Conditional Fields for Sign Up */}
+      {/* The form card with a "glassmorphism" and 3D tilt effect */}
+      <div
+        ref={cardRef}
+        className="relative z-10 w-full max-w-md p-8 space-y-6 bg-gray-800/50 border border-gray-700 rounded-2xl shadow-2xl backdrop-blur-xl transition-transform duration-300 ease-out"
+        style={{ transform: `rotateX(${rotate.x}deg) rotateY(${rotate.y}deg)` }}
+      >
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-white">Get Started</h1>
+          <p className="text-gray-400 mt-2">{isSignUp ? 'Join the community effort.' : 'Welcome back.'}</p>
+        </div>
+        <form onSubmit={isSignUp ? handleSignup : handleLogin} className="space-y-4">
           {isSignUp && (
-            <>
-              {/* Full Name Input */}
-              <div>
-                <label
-                  htmlFor="fullName"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  Full Name
-                </label>
-                <input
-                  id="fullName"
-                  className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  type="text"
-                  placeholder="John Doe"
-                  value={fullName}
-                  required
-                  onChange={(e) => setFullName(e.target.value)}
-                />
-              </div>
-
-              {/* Role Selection */}
-              <div>
-                <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                  I am a...
-                </label>
-                <select
-                  id="role"
-                  className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                >
-                  <option value="reporter">Reporter (I report garbage)</option>
-                  <option value="picker">Picker (I pick up garbage)</option>
-                </select>
-              </div>
-            </>
+             <input
+              className="w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg placeholder:text-gray-400 text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+              type="text"
+              placeholder="Full Name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+            />
           )}
-
-          {/* Submit Button */}
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-4 py-2 font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              {loading ? 'Processing...' : isSignUp ? 'Sign Up' : 'Sign In'}
-            </button>
-          </div>
+          <input
+            className="w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg placeholder:text-gray-400 text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <input
+            className="w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg placeholder:text-gray-400 text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition-all"
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+           {isSignUp && (
+            <select className={`w-full p-3 bg-gray-700/50 border border-gray-600 rounded-lg text-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 transition-all`} value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="reporter">I am a Reporter</option>
+              <option value="picker">I am a Picker</option>
+            </select>
+          )}
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full bg-green-600 text-white p-3 rounded-lg font-semibold mb-6 hover:bg-green-700 disabled:bg-gray-500 transform hover:scale-105 transition-all duration-300`}
+          >
+            {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
+          </button>
         </form>
 
-        {/* Toggle between Sign In and Sign Up */}
-        <div className="text-center">
-          <p className="text-sm text-gray-600">
-            {isSignUp ? 'Already have an account?' : "Don't have an account?"}
-            <button
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="ml-1 font-medium text-indigo-600 hover:text-indigo-500"
-            >
-              {isSignUp ? 'Sign In' : 'Sign Up'}
-            </button>
-          </p>
+        <div className={`text-center text-gray-400`}>
+          {isSignUp ? 'Already a member?' : "Don't have an account?"}
+          <button onClick={() => setIsSignUp(!isSignUp)} className="font-semibold text-green-500 ml-1 hover:underline">
+            {isSignUp ? 'Sign In' : 'Sign Up'}
+          </button>
         </div>
       </div>
     </div>
