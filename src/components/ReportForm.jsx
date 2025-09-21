@@ -13,10 +13,9 @@ export default function ReportForm({ user, onLogout }) {
 
   const [reportLocation, setReportLocation] = useState(null);
   const [currentLocation, setCurrentLocation] = useState(null);
-  const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Charkhi Dadri
+  const [mapCenter, setMapCenter] = useState([28.59, 76.28]);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  // This useEffect fetches reports and sets up polling for updates
   useEffect(() => {
     const fetchMyReports = async () => {
       setReportsLoading(true);
@@ -30,7 +29,6 @@ export default function ReportForm({ user, onLogout }) {
     return () => clearInterval(interval);
   }, [user.id]);
 
-  // This useEffect handles geolocation and runs only once to prevent loops
   useEffect(() => {
     let watcherId;
     if (navigator.geolocation) {
@@ -51,7 +49,7 @@ export default function ReportForm({ user, onLogout }) {
       });
     }
     return () => { if (watcherId) navigator.geolocation.clearWatch(watcherId); };
-  }, []); // The empty array [] is the crucial fix for the loop
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -104,7 +102,7 @@ export default function ReportForm({ user, onLogout }) {
   return (
     <div className="relative min-h-screen bg-dark-text text-gray-300 font-sans">
       <header className="relative z-20 p-4 flex justify-between items-center bg-dark-text/50 backdrop-blur-sm">
-        <h1 className="text-xl font-bold text-white">Reporter Dashboard</h1>
+        <h1 className="text-xl font-bold text-white">ReportSnapy</h1>
         <div className="flex items-center gap-4">
           <button onClick={() => setIsProfileOpen(true)} className="px-4 py-2 font-semibold text-white bg-primary rounded-lg hover:bg-blue-700">Profile</button>
           <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">Logout</button>

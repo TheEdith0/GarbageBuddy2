@@ -105,7 +105,7 @@ export default function Auth() {
     <div className="relative flex items-center justify-center min-h-screen bg-gray-900 text-gray-300 overflow-hidden" style={{ perspective: '1000px' }}>
       
       <div className="absolute top-0 left-0 p-8 z-30">
-        <h1 className="text-2xl font-bold text-white">Garbage Buddy</h1>
+        <h1 className="text-2xl font-bold text-white">ReportSnapy</h1>
       </div>
 
       <AnimatedBackground />
@@ -125,7 +125,6 @@ export default function Auth() {
         {showLanding ? (
           <div className="text-center">
             <h1 className="text-4xl font-bold text-white mb-4">Join the Movement</h1>
-            {/* --- NEW TAGLINE ADDED HERE --- */}
             <p className="text-gray-300 text-lg italic mb-8">
               "Snap it. Tag it. Trash gone."
             </p>

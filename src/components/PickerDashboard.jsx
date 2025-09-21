@@ -3,7 +3,6 @@ import { supabase } from '../supabaseClient';
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Tooltip } from 'react-leaflet';
 import Profile from './Profile';
 
-// A reusable Modal component for the photo upload prompt
 const Modal = ({ isOpen, children }) => {
   if (!isOpen) return null;
   return (
@@ -16,7 +15,7 @@ const Modal = ({ isOpen, children }) => {
 export default function PickerDashboard({ user, onLogout }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [mapCenter, setMapCenter] = useState([28.59, 76.28]); // Default to Charkhi Dadri
+  const [mapCenter, setMapCenter] = useState([28.59, 76.28]);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -24,7 +23,6 @@ export default function PickerDashboard({ user, onLogout }) {
   const [afterImageFile, setAfterImageFile] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // This useEffect now runs only ONCE to prevent the infinite loop
   useEffect(() => {
     const fetchReports = async (location) => {
       setLoading(true);
@@ -59,7 +57,7 @@ export default function PickerDashboard({ user, onLogout }) {
       alert("Geolocation is not supported. Showing results for Charkhi Dadri.");
       fetchReports({ lat: mapCenter[0], lng: mapCenter[1] });
     }
-  }, []); // The empty array [] is the crucial fix for the loop
+  }, []);
 
   const handleMarkCompleteClick = (report) => {
     setSelectedReport(report);
@@ -100,7 +98,7 @@ export default function PickerDashboard({ user, onLogout }) {
   return (
     <div className="relative min-h-screen bg-dark-text text-gray-300 font-sans">
       <header className="relative z-20 p-4 flex justify-between items-center bg-dark-text/50 backdrop-blur-sm">
-        <h1 className="text-xl font-bold text-white">Picker Dashboard</h1>
+        <h1 className="text-xl font-bold text-white">ReportSnapy</h1>
         <div className="flex items-center gap-4">
           <button onClick={() => setIsProfileOpen(true)} className="px-4 py-2 font-semibold text-white bg-primary rounded-lg hover:bg-blue-700">Profile</button>
           <button onClick={onLogout} className="px-4 py-2 font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">Logout</button>
@@ -145,18 +143,9 @@ export default function PickerDashboard({ user, onLogout }) {
                     <p className="font-semibold text-white">{report.dist_meters.toFixed(0)}m away</p>
                     <p className="text-sm text-gray-400">Status: <span className="font-semibold text-orange-400">{report.status.toUpperCase()}</span></p>
                 </div>
-
-                {/* --- NEW: Get Directions Button --- */}
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${report.latitude},${report.longitude}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full text-center mb-2 px-4 py-2 font-semibold text-white bg-primary rounded-lg hover:bg-blue-700 transition-colors"
-                >
+                <a href={`https://www.google.com/maps/dir/?api=1&destination=${report.latitude},${report.longitude}`} target="_blank" rel="noopener noreferrer" className="block w-full text-center mb-2 px-4 py-2 font-semibold text-white bg-primary rounded-lg hover:bg-blue-700 transition-colors">
                   Get Directions
                 </a>
-                {/* --- END OF NEW CODE --- */}
-
                 <button onClick={() => handleMarkCompleteClick(report)} className="w-full px-4 py-2 font-semibold text-white bg-secondary rounded-lg hover:bg-green-700 transition-colors">
                   Mark as Completed
                 </button>
