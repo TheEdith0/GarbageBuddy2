@@ -8,12 +8,12 @@ export default function Leaderboard({ onBack }) {
   useEffect(() => {
     const fetchTopUsers = async () => {
       setLoading(true);
-      // Fetch users with the most points, limiting to the top 10
+      // --- CHANGE 1: Fetch top 50 users instead of 10 ---
       const { data, error } = await supabase
         .from('profiles')
         .select('full_name, points')
         .order('points', { ascending: false })
-        .limit(10);
+        .limit(50); // <-- Updated from 10 to 50
 
       if (error) {
         console.error("Error fetching leaderboard:", error);
@@ -29,19 +29,21 @@ export default function Leaderboard({ onBack }) {
     <div className="relative min-h-screen bg-dark-text text-gray-300 font-sans p-4">
       <header className="text-center mb-8">
         <h1 className="text-4xl font-bold text-white">Community Leaderboard</h1>
-        <p className="text-secondary">Top 10 Heroes of Charkhi Dadri</p>
+        {/* --- CHANGE 2: Updated the subtitle text --- */}
+        <p className="text-secondary">Top 50 Heroes</p> 
       </header>
       
       {loading ? (
         <p className="text-center">Loading heroes...</p>
       ) : (
         <div className="max-w-2xl mx-auto bg-gray-800/50 rounded-2xl p-4">
+          
           <ul className="space-y-3">
             {topUsers.map((user, index) => (
               <li key={index} className="flex items-center justify-between bg-gray-900/50 p-3 rounded-lg">
                 <div className="flex items-center">
-                  <span className="text-xl font-bold w-8">{index + 1}</span>
-                  <span className="text-lg">{user.full_name}</span>
+                  <span className="text-xl font-bold w-10 text-center">{index + 1}</span>
+                  <span className="text-lg ml-4">{user.full_name}</span>
                 </div>
                 <span className="text-xl font-bold text-secondary">{user.points} pts</span>
               </li>
