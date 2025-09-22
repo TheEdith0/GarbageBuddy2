@@ -29,27 +29,55 @@ export default function ReportForm({ user, onLogout }) {
     return () => clearInterval(interval);
   }, [user.id]);
 
+  // --- NEW: More Robust Geolocation Logic ---
   useEffect(() => {
-    let watcherId;
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const userCoords = [pos.coords.latitude, pos.coords.longitude];
-          setMapCenter(userCoords);
-          setReportLocation(userCoords);
-          setCurrentLocation(userCoords);
-        },
-        () => {
-          alert('Could not get your location. Please mark it manually.');
-          setReportLocation(mapCenter);
+    const handleLocationSuccess = (pos) => {
+        const userCoords = [pos.coords.latitude, pos.coords.longitude];
+        setMapCenter(userCoords);
+        setReportLocation(userCoords);
+        setCurrentLocation(userCoords);
+    };
+
+    const handleLocationError = (error) => {
+        let message = "Could not get your location for the map. ";
+         switch(error.code) {
+            case error.PERMISSION_DENIED:
+              message += "You denied the request for Geolocation.";
+              break;
+            case error.POSITION_UNAVAILABLE:
+              message += "Location information is unavailable.";
+              break;
+            case error.TIMEOUT:
+              message += "The request to get user location timed out.";
+              break;
+            default:
+              message += "An unknown error occurred.";
+              break;
         }
-      );
-      watcherId = navigator.geolocation.watchPosition((pos) => {
+        console.error("Geolocation Error:", error.message);
+        alert(message + " Please mark the location manually.");
+        setReportLocation(mapCenter); // Fallback to default
+    };
+
+    const locationOptions = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(handleLocationSuccess, handleLocationError, locationOptions);
+      
+      const watcherId = navigator.geolocation.watchPosition((pos) => {
         setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
       });
+      return () => { if (watcherId) navigator.geolocation.clearWatch(watcherId); };
+    } else {
+        alert("Geolocation is not supported by this browser. Please mark the location manually.");
+        setReportLocation(mapCenter); // Fallback to default
     }
-    return () => { if (watcherId) navigator.geolocation.clearWatch(watcherId); };
   }, []);
+  // --- END OF NEW LOGIC ---
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -121,15 +149,11 @@ export default function ReportForm({ user, onLogout }) {
                   <MapContainer center={mapCenter} zoom={13} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
                     <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
                     <DraggableMarker />
-                    
-                    {/* --- THIS SECTION DRAWS THE BLUE DOT --- */}
                     {currentLocation && (
                       <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
                         <Tooltip>You are here</Tooltip>
                       </CircleMarker>
                     )}
-                    {/* --- END OF FIX --- */}
-
                   </MapContainer>
                 ) : <div className='h-full w-full flex items-center justify-center bg-gray-700'>Getting location...</div> }
               </div>

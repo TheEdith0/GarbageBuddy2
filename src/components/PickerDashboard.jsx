@@ -36,27 +36,55 @@ export default function PickerDashboard({ user, onLogout }) {
       setLoading(false);
     };
 
+    // --- NEW: More Robust Geolocation Logic ---
+    const handleLocationSuccess = (pos) => {
+      const userCoords = [pos.coords.latitude, pos.coords.longitude];
+      setMapCenter(userCoords);
+      setCurrentLocation(userCoords);
+      fetchReports({ lat: userCoords[0], lng: userCoords[1] });
+    };
+
+    const handleLocationError = (error) => {
+      let message = "Could not get your location. ";
+      switch(error.code) {
+        case error.PERMISSION_DENIED:
+          message += "You denied the request for Geolocation.";
+          break;
+        case error.POSITION_UNAVAILABLE:
+          message += "Location information is unavailable from your browser/device.";
+          break;
+        case error.TIMEOUT:
+          message += "The request to get user location timed out. Please try again in an area with a better signal.";
+          break;
+        default:
+          message += "An unknown error occurred.";
+          break;
+      }
+      console.error("Geolocation Error:", error.message);
+      alert(message);
+      // Fallback to default location
+      fetchReports({ lat: 28.59, lng: 76.28 });
+    };
+    
+    const locationOptions = {
+        enableHighAccuracy: true,
+        timeout: 10000, // Wait 10 seconds
+        maximumAge: 0
+    };
+
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const userCoords = [pos.coords.latitude, pos.coords.longitude];
-          setMapCenter(userCoords);
-          setCurrentLocation(userCoords);
-          fetchReports({ lat: userCoords[0], lng: userCoords[1] });
-        },
-        () => {
-          alert("Could not get your location. Showing results for Charkhi Dadri.");
-          fetchReports({ lat: mapCenter[0], lng: mapCenter[1] });
-        }
-      );
+      navigator.geolocation.getCurrentPosition(handleLocationSuccess, handleLocationError, locationOptions);
+      
       const watcherId = navigator.geolocation.watchPosition((pos) => {
         setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
       });
       return () => navigator.geolocation.clearWatch(watcherId);
     } else {
-      alert("Geolocation is not supported. Showing results for Charkhi Dadri.");
-      fetchReports({ lat: mapCenter[0], lng: mapCenter[1] });
+      alert("Geolocation is not supported by this browser. Showing results for Charkhi Dadri.");
+      fetchReports({ lat: 28.59, lng: 76.28 });
     }
+    // --- END OF NEW LOGIC ---
+
   }, []);
 
   const handleMarkCompleteClick = (report) => {
@@ -107,19 +135,17 @@ export default function PickerDashboard({ user, onLogout }) {
       
       <main className="relative z-10 container mx-auto px-4 py-8">
         <h2 className="text-3xl font-bold text-white mb-6 text-center">Available Tasks Near You</h2>
-        
+        [Image of a map of Charkhi Dadri with a blue dot]
         <div className="mb-8 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl h-96">
           {loading ? ( <div className='h-full flex items-center justify-center bg-gray-800'>Loading Map...</div> ) : (
             <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', backgroundColor: '#1F2937' }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap'/>
               
-              {/* --- THIS SECTION DRAWS THE BLUE DOT --- */}
               {currentLocation && (
                 <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
                   <Tooltip>You are here</Tooltip>
                 </CircleMarker>
               )}
-              {/* --- END OF FIX --- */}
 
               {reports.map(report => (
                 <Marker key={report.id} position={[report.latitude, report.longitude]}>
