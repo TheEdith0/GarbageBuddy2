@@ -121,11 +121,15 @@ export default function ReportForm({ user, onLogout }) {
                   <MapContainer center={mapCenter} zoom={13} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
                     <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
                     <DraggableMarker />
+                    
+                    {/* --- THIS SECTION DRAWS THE BLUE DOT --- */}
                     {currentLocation && (
                       <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
                         <Tooltip>You are here</Tooltip>
                       </CircleMarker>
                     )}
+                    {/* --- END OF FIX --- */}
+
                   </MapContainer>
                 ) : <div className='h-full w-full flex items-center justify-center bg-gray-700'>Getting location...</div> }
               </div>

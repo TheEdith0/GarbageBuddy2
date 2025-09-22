@@ -106,20 +106,20 @@ export default function PickerDashboard({ user, onLogout }) {
       </header>
       
       <main className="relative z-10 container mx-auto px-4 py-8">
-        {/* --- THIS IS THE CHANGE --- */}
         <h2 className="text-3xl font-bold text-white mb-6 text-center">Available Tasks Near You</h2>
-        {/* --- END OF CHANGE --- */}
-
+        
         <div className="mb-8 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl h-96">
           {loading ? ( <div className='h-full flex items-center justify-center bg-gray-800'>Loading Map...</div> ) : (
             <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', backgroundColor: '#1F2937' }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap'/>
               
+              {/* --- THIS SECTION DRAWS THE BLUE DOT --- */}
               {currentLocation && (
                 <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
                   <Tooltip>You are here</Tooltip>
                 </CircleMarker>
               )}
+              {/* --- END OF FIX --- */}
 
               {reports.map(report => (
                 <Marker key={report.id} position={[report.latitude, report.longitude]}>
