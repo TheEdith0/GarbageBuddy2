@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Tooltip } from 'react-leaflet';
 import Profile from './Profile';
@@ -17,12 +17,19 @@ export default function PickerDashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [mapCenter, setMapCenter] = useState([28.59, 76.28]);
   const [currentLocation, setCurrentLocation] = useState(null);
+  
+  // --- NEW: State to track the location finding process ---
+  const [locationStatus, setLocationStatus] = useState('locating'); // 'locating', 'success', 'error'
+  const [locationError, setLocationError] = useState('');
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [afterImageFile, setAfterImageFile] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const isInitialLocationFound = useRef(false);
 
+  // --- NEW: A more robust way to get location and fetch data ---
   useEffect(() => {
     const fetchReports = async (location) => {
       setLoading(true);
@@ -36,56 +43,47 @@ export default function PickerDashboard({ user, onLogout }) {
       setLoading(false);
     };
 
-    // --- NEW: More Robust Geolocation Logic ---
-    const handleLocationSuccess = (pos) => {
+    if (!navigator.geolocation) {
+      setLocationStatus('error');
+      setLocationError("Geolocation is not supported by your browser.");
+      fetchReports({ lat: 28.59, lng: 76.28 });
+      return;
+    }
+
+    const handleSuccess = (pos) => {
       const userCoords = [pos.coords.latitude, pos.coords.longitude];
-      setMapCenter(userCoords);
       setCurrentLocation(userCoords);
-      fetchReports({ lat: userCoords[0], lng: userCoords[1] });
+      setLocationStatus('success');
+
+      // Only run this on the VERY FIRST successful location fix
+      if (!isInitialLocationFound.current) {
+        setMapCenter(userCoords);
+        fetchReports({ lat: userCoords[0], lng: userCoords[1] });
+        isInitialLocationFound.current = true;
+      }
     };
 
-    const handleLocationError = (error) => {
-      let message = "Could not get your location. ";
-      switch(error.code) {
-        case error.PERMISSION_DENIED:
-          message += "You denied the request for Geolocation.";
-          break;
-        case error.POSITION_UNAVAILABLE:
-          message += "Location information is unavailable from your browser/device.";
-          break;
-        case error.TIMEOUT:
-          message += "The request to get user location timed out. Please try again in an area with a better signal.";
-          break;
-        default:
-          message += "An unknown error occurred.";
-          break;
-      }
-      console.error("Geolocation Error:", error.message);
-      alert(message);
+    const handleError = (error) => {
+      setLocationStatus('error');
+      let message = "Could not get location. ";
+      if (error.code === 1) message += "Permission denied.";
+      else if (error.code === 2) message += "Position unavailable.";
+      else message += "Request timed out.";
+      setLocationError(message);
+      console.error("Geolocation Error:", message);
       // Fallback to default location
       fetchReports({ lat: 28.59, lng: 76.28 });
     };
-    
-    const locationOptions = {
-        enableHighAccuracy: true,
-        timeout: 10000, // Wait 10 seconds
-        maximumAge: 0
-    };
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(handleLocationSuccess, handleLocationError, locationOptions);
-      
-      const watcherId = navigator.geolocation.watchPosition((pos) => {
-        setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
-      });
-      return () => navigator.geolocation.clearWatch(watcherId);
-    } else {
-      alert("Geolocation is not supported by this browser. Showing results for Charkhi Dadri.");
-      fetchReports({ lat: 28.59, lng: 76.28 });
-    }
-    // --- END OF NEW LOGIC ---
+    // Use watchPosition for a more persistent location request
+    const watcherId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
 
-  }, []);
+    return () => navigator.geolocation.clearWatch(watcherId);
+  }, []); // Empty array ensures this runs only once on mount
 
   const handleMarkCompleteClick = (report) => {
     setSelectedReport(report);
@@ -123,6 +121,19 @@ export default function PickerDashboard({ user, onLogout }) {
 
   const blueDotOptions = { color: '#007BFF', fillColor: '#007BFF', fillOpacity: 1, radius: 8 };
 
+  const MapStatusOverlay = () => {
+    if (locationStatus === 'locating') {
+      return <div className='h-full flex items-center justify-center bg-gray-800/80 text-white'>Finding your location...</div>;
+    }
+    if (locationStatus === 'error') {
+       return <div className='h-full flex items-center justify-center bg-gray-800/80 text-yellow-400 p-4 text-center'>{locationError} Showing default results for Charkhi Dadri.</div>;
+    }
+    if (loading) {
+       return <div className='h-full flex items-center justify-center bg-gray-800/80 text-white'>Loading reports...</div>;
+    }
+    return null;
+  };
+
   return (
     <div className="relative min-h-screen bg-dark-text text-gray-300 font-sans">
       <header className="relative z-20 p-4 flex justify-between items-center bg-dark-text/50 backdrop-blur-sm">
@@ -135,31 +146,29 @@ export default function PickerDashboard({ user, onLogout }) {
       
       <main className="relative z-10 container mx-auto px-4 py-8">
         <h2 className="text-3xl font-bold text-white mb-6 text-center">Available Tasks Near You</h2>
-        [Image of a map of Charkhi Dadri with a blue dot]
-        <div className="mb-8 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl h-96">
-          {loading ? ( <div className='h-full flex items-center justify-center bg-gray-800'>Loading Map...</div> ) : (
-            <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', backgroundColor: '#1F2937' }}>
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap'/>
-              
-              {currentLocation && (
-                <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
-                  <Tooltip>You are here</Tooltip>
-                </CircleMarker>
-              )}
+        <div className="mb-8 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl h-96 relative">
+          <MapStatusOverlay />
+          <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', backgroundColor: '#1F2937' }}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap'/>
+            
+            {currentLocation && (
+              <CircleMarker center={currentLocation} pathOptions={blueDotOptions}>
+                <Tooltip>You are here</Tooltip>
+              </CircleMarker>
+            )}
 
-              {reports.map(report => (
-                <Marker key={report.id} position={[report.latitude, report.longitude]}>
-                  <Popup>
-                    <img src={report.image_url} alt="Garbage" className="w-full h-28 object-cover rounded-t mb-2"/>
-                    <div className="p-2">
-                        <p className="text-xs text-gray-400 italic mb-2">"{report.description || 'No description.'}"</p>
-                        <p className="text-sm font-bold">{report.dist_meters.toFixed(0)}m away</p>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
-          )}
+            {reports.map(report => (
+              <Marker key={report.id} position={[report.latitude, report.longitude]}>
+                <Popup>
+                  <img src={report.image_url} alt="Garbage" className="w-full h-28 object-cover rounded-t mb-2"/>
+                  <div className="p-2">
+                      <p className="text-xs text-gray-400 italic mb-2">"{report.description || 'No description.'}"</p>
+                      <p className="text-sm font-bold">{report.dist_meters.toFixed(0)}m away</p>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

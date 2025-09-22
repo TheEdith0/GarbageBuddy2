@@ -15,6 +15,9 @@ export default function ReportForm({ user, onLogout }) {
   const [currentLocation, setCurrentLocation] = useState(null);
   const [mapCenter, setMapCenter] = useState([28.59, 76.28]);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  
+  // --- NEW: State to track the location finding process ---
+  const [locationStatus, setLocationStatus] = useState('locating'); // 'locating', 'success', 'error'
 
   useEffect(() => {
     const fetchMyReports = async () => {
@@ -29,55 +32,41 @@ export default function ReportForm({ user, onLogout }) {
     return () => clearInterval(interval);
   }, [user.id]);
 
-  // --- NEW: More Robust Geolocation Logic ---
+  // --- NEW: A more robust way to get location ---
   useEffect(() => {
-    const handleLocationSuccess = (pos) => {
-        const userCoords = [pos.coords.latitude, pos.coords.longitude];
+    if (!navigator.geolocation) {
+      setLocationStatus('error');
+      alert("Geolocation is not supported. Please mark the location manually.");
+      setReportLocation(mapCenter); // Fallback to default
+      return;
+    }
+
+    const handleSuccess = (pos) => {
+      const userCoords = [pos.coords.latitude, pos.coords.longitude];
+      setCurrentLocation(userCoords);
+      // Only set the map center and report location on the first success
+      if (locationStatus !== 'success') {
         setMapCenter(userCoords);
         setReportLocation(userCoords);
-        setCurrentLocation(userCoords);
+      }
+      setLocationStatus('success');
     };
 
-    const handleLocationError = (error) => {
-        let message = "Could not get your location for the map. ";
-         switch(error.code) {
-            case error.PERMISSION_DENIED:
-              message += "You denied the request for Geolocation.";
-              break;
-            case error.POSITION_UNAVAILABLE:
-              message += "Location information is unavailable.";
-              break;
-            case error.TIMEOUT:
-              message += "The request to get user location timed out.";
-              break;
-            default:
-              message += "An unknown error occurred.";
-              break;
-        }
-        console.error("Geolocation Error:", error.message);
-        alert(message + " Please mark the location manually.");
-        setReportLocation(mapCenter); // Fallback to default
+    const handleError = (error) => {
+      setLocationStatus('error');
+      console.error("Geolocation Error:", error.message);
+      alert("Could not get your location. Please mark it manually on the map.");
+      setReportLocation(mapCenter); // Fallback to default
     };
 
-    const locationOptions = {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-    };
+    const watcherId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(handleLocationSuccess, handleLocationError, locationOptions);
-      
-      const watcherId = navigator.geolocation.watchPosition((pos) => {
-        setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
-      });
-      return () => { if (watcherId) navigator.geolocation.clearWatch(watcherId); };
-    } else {
-        alert("Geolocation is not supported by this browser. Please mark the location manually.");
-        setReportLocation(mapCenter); // Fallback to default
-    }
-  }, []);
-  // --- END OF NEW LOGIC ---
+    return () => navigator.geolocation.clearWatch(watcherId);
+  }, [locationStatus, mapCenter]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -145,7 +134,9 @@ export default function ReportForm({ user, onLogout }) {
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">Mark the Location</label>
               <div className='rounded-2xl overflow-hidden' style={{ height: '300px', width: '100%' }}>
-                {reportLocation ? (
+                {locationStatus === 'locating' ? (
+                  <div className='h-full w-full flex items-center justify-center bg-gray-700'>Finding your location...</div>
+                ) : (
                   <MapContainer center={mapCenter} zoom={13} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
                     <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
                     <DraggableMarker />
@@ -155,7 +146,7 @@ export default function ReportForm({ user, onLogout }) {
                       </CircleMarker>
                     )}
                   </MapContainer>
-                ) : <div className='h-full w-full flex items-center justify-center bg-gray-700'>Getting location...</div> }
+                )}
               </div>
               <p className="text-xs text-center text-gray-500 mt-2">The blue dot is your live location. Drag the red pin to the garbage pile.</p>
             </div>
